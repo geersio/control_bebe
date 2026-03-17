@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/format_duration.dart';
 import '../../../core/theme/edit_dialog_theme.dart';
 import '../../../core/db/isar_service.dart';
 import '../../../core/widgets/edit_dialog_fields.dart';
@@ -254,8 +255,7 @@ class _ActiveTimerBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final minutes = timer.elapsed.inMinutes;
-    final seconds = timer.elapsed.inSeconds % 60;
+    final totalSeconds = timer.elapsed.inSeconds;
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -275,7 +275,7 @@ class _ActiveTimerBanner extends StatelessWidget {
                   style: const TextStyle(fontWeight: FontWeight.w600),
                 ),
                 Text(
-                  '${minutes}m ${seconds}s',
+                  formatDurationSeconds(totalSeconds),
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         color: AppTheme.primaryPink,
                         fontWeight: FontWeight.bold,
@@ -406,7 +406,7 @@ class _FeedingRecordTile extends StatelessWidget {
       FeedingType.bottle => (Icons.local_drink, 'Biberón', AppTheme.primaryBlue),
     };
     final duration = record.durationSeconds != null
-        ? '${record.durationSeconds! ~/ 60}m ${record.durationSeconds! % 60}s'
+        ? formatDurationSeconds(record.durationSeconds!)
         : null;
     final amount = record.amountMl != null ? '${record.amountMl} ml' : null;
     return Card(

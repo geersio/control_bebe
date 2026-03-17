@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/format_duration.dart';
 import '../../../core/db/isar_service.dart';
 import '../../../core/models/baby_profile.dart';
 import '../../../core/models/diaper_record.dart';
@@ -678,7 +679,7 @@ class _FeedingCard extends StatelessWidget {
                             ),
                       ),
                       Text(
-                        '${data.breastMinutes} min',
+                        formatMinutes(data.breastMinutes),
                         style: Theme.of(context).textTheme.titleMedium?.copyWith(
                               fontWeight: FontWeight.bold,
                               color: AppTheme.primaryPink,
@@ -737,7 +738,7 @@ class _FeedingCard extends StatelessWidget {
                         ),
                   ),
                   Text(
-                    'Hace ${data.lastFeedingMinutesAgo} min',
+                    'Hace ${formatMinutes(data.lastFeedingMinutesAgo!)}',
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                           fontWeight: FontWeight.bold,
                           color: AppTheme.textDark,
@@ -924,7 +925,7 @@ class _DiapersCard extends StatelessWidget {
                         ),
                   ),
                   Text(
-                    'Hace ${data.lastChangeMinutesAgo} min',
+                    'Hace ${formatMinutes(data.lastChangeMinutesAgo!)}',
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                           fontWeight: FontWeight.bold,
                           color: AppTheme.textDark,

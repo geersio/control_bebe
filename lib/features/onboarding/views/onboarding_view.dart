@@ -254,7 +254,7 @@ class _ScanBabyScreenState extends State<_ScanBabyScreen> {
   void _onDetect(BarcodeCapture capture) async {
     if (_processing) return;
     final barcode = capture.barcodes.firstOrNull;
-    final code = barcode?.rawValue;
+    final code = barcode?.rawValue?.trim();
     if (code == null || code.isEmpty) return;
 
     setState(() {
@@ -268,7 +268,10 @@ class _ScanBabyScreenState extends State<_ScanBabyScreen> {
       if (mounted) {
         setState(() {
           _processing = false;
-          _error = 'No se pudo unir a la familia. Inténtalo de nuevo.';
+          final msg = e.toString();
+          _error = msg.contains('no encontrada') || msg.contains('not found')
+              ? 'Familia no encontrada. Comprueba que el QR sea correcto.'
+              : 'No se pudo unir a la familia. Inténtalo de nuevo.';
         });
       }
     }
