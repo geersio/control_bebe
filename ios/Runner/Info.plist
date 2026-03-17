@@ -51,9 +51,9 @@
 		<true/>
 		<key>NSCameraUsageDescription</key>
 		<string>La cámara se usa para escanear códigos QR y unirte a una familia.</string>
-		<!-- Google Sign-In: Obtén estos valores de GoogleService-Info.plist (Firebase Console) -->
+		<!-- Google Sign-In: valores de firebase_options.dart (iosClientId) -->
 		<key>GIDClientID</key>
-		<string>REEMPLAZA_CON_TU_IOS_CLIENT_ID.apps.googleusercontent.com</string>
+		<string>933035228249-qukbu1rdjqpankt4r3ecvf17lsrcmqbh.apps.googleusercontent.com</string>
 		<key>CFBundleURLTypes</key>
 		<array>
 			<dict>
@@ -61,8 +61,7 @@
 				<string>Editor</string>
 				<key>CFBundleURLSchemes</key>
 				<array>
-					<!-- REVERSED_CLIENT_ID de GoogleService-Info.plist (ej: com.googleusercontent.apps.933035228249-xxx) -->
-					<string>REEMPLAZA_CON_TU_REVERSED_CLIENT_ID</string>
+					<string>com.googleusercontent.apps.933035228249-qukbu1rdjqpankt4r3ecvf17lsrcmqbh</string>
 				</array>
 			</dict>
 		</array>
