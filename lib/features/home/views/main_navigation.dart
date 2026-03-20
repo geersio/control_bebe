@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:material_design_icons_flutter/material_design_icons_flutter.dart';
 
+import '../../../core/db/isar_service.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../settings/views/settings_page.dart';
 import 'home_view.dart';
 import '../../diapers/views/diapers_view.dart';
 import '../../feeding/views/feeding_view.dart';
@@ -46,6 +49,15 @@ class _MainNavigationState extends ConsumerState<MainNavigation> {
     setState(() => _currentIndex = index);
   }
 
+  Future<void> _openSettings() async {
+    final baby = await IsarService.getBabyProfile();
+    if (!mounted) return;
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => SettingsPage(initialBaby: baby)),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     void goToHome() => setState(() => _currentIndex = 0);
@@ -54,65 +66,88 @@ class _MainNavigationState extends ConsumerState<MainNavigation> {
         onNavigateToTab: (i) => setState(() => _currentIndex = i),
         onTitleTap: goToHome,
       ),
-      DiapersView(onTitleTap: goToHome, scrollController: _diapersScrollController),
-      FeedingView(onTitleTap: goToHome, scrollController: _feedingScrollController),
-      WeightView(onTitleTap: goToHome, scrollController: _weightScrollController),
+      DiapersView(
+        onTitleTap: goToHome,
+        onSettingsTap: _openSettings,
+        scrollController: _diapersScrollController,
+      ),
+      FeedingView(
+        onTitleTap: goToHome,
+        onSettingsTap: _openSettings,
+        scrollController: _feedingScrollController,
+      ),
+      WeightView(
+        onTitleTap: goToHome,
+        onSettingsTap: _openSettings,
+        scrollController: _weightScrollController,
+      ),
     ];
     return Scaffold(
       body: IndexedStack(
         index: _currentIndex,
         children: screens,
       ),
-      bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
-              blurRadius: 10,
-              offset: const Offset(0, -2),
+      bottomNavigationBar: Material(
+        elevation: 12,
+        shadowColor: Colors.black26,
+        color: Colors.transparent,
+        child: ClipRRect(
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+          child: Container(
+            decoration: const BoxDecoration(
+              color: AppTheme.cardBackground,
             ),
-          ],
-        ),
-        child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _NavItem(
-                  icon: Icons.home_outlined,
-                  activeIcon: Icons.home,
-                  label: 'Inicio',
-                  isSelected: _currentIndex == 0,
-                  color: AppTheme.primaryBlue,
-                  onTap: () => setState(() => _currentIndex = 0),
+            child: SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: _NavItem(
+                        icon: Icons.home_rounded,
+                        activeIcon: Icons.home_rounded,
+                        label: 'INICIO',
+                        isSelected: _currentIndex == 0,
+                        selectedBackground: AppTheme.navHomeSelectedFill,
+                        selectedForeground: AppTheme.navHomeSelectedFg,
+                        onTap: () => setState(() => _currentIndex = 0),
+                      ),
+                    ),
+                    Expanded(
+                      child: _NavItem(
+                        icon: MdiIcons.humanBabyChangingTable,
+                        activeIcon: MdiIcons.humanBabyChangingTable,
+                        label: 'PAÑALES',
+                        isSelected: _currentIndex == 1,
+                        selectedBackground: AppTheme.navDiapersSelectedFill,
+                        selectedForeground: AppTheme.navDiapersSelectedFg,
+                        onTap: () => _onTabTap(1),
+                      ),
+                    ),
+                    Expanded(
+                      child: _NavItem(
+                        fontAwesomeIcon: FontAwesomeIcons.utensils,
+                        label: 'ALIMENTACIÓN',
+                        isSelected: _currentIndex == 2,
+                        selectedBackground: AppTheme.navFeedingSelectedFill,
+                        selectedForeground: AppTheme.navFeedingSelectedFg,
+                        onTap: () => _onTabTap(2),
+                      ),
+                    ),
+                    Expanded(
+                      child: _NavItem(
+                        icon: Icons.monitor_weight_rounded,
+                        activeIcon: Icons.monitor_weight_rounded,
+                        label: 'PESO',
+                        isSelected: _currentIndex == 3,
+                        selectedBackground: AppTheme.navWeightSelectedFill,
+                        selectedForeground: AppTheme.navWeightSelectedFg,
+                        onTap: () => _onTabTap(3),
+                      ),
+                    ),
+                  ],
                 ),
-                _NavItem(
-                  icon: MdiIcons.humanBabyChangingTable,
-                  activeIcon: MdiIcons.humanBabyChangingTable,
-                  label: 'Pañales',
-                  isSelected: _currentIndex == 1,
-                  color: AppTheme.primaryBlue,
-                  onTap: () => _onTabTap(1),
-                ),
-                _NavItem(
-                  icon: MdiIcons.foodAppleOutline,
-                  activeIcon: MdiIcons.foodApple,
-                  label: 'Alimentación',
-                  isSelected: _currentIndex == 2,
-                  color: AppTheme.primaryPink,
-                  onTap: () => _onTabTap(2),
-                ),
-                _NavItem(
-                  icon: Icons.monitor_weight_outlined,
-                  activeIcon: Icons.monitor_weight,
-                  label: 'Peso',
-                  isSelected: _currentIndex == 3,
-                  color: AppTheme.primaryOrange,
-                  onTap: () => _onTabTap(3),
-                ),
-              ],
+              ),
             ),
           ),
         ),
@@ -121,48 +156,93 @@ class _MainNavigationState extends ConsumerState<MainNavigation> {
   }
 }
 
+/// Alimentación (Font Awesome): tamaño de referencia, algo menor que Material/MDI.
+const double _kBottomNavIconSizeFa = 24;
+/// Inicio, pañales y peso ([Icon] / MDI).
+const double _kBottomNavIconSizeMaterial = 30;
+/// Misma altura de cápsula en las cuatro pestañas (hueco repartido por [Expanded]).
+const double _kNavPillHeight = 64;
+
 class _NavItem extends StatelessWidget {
-  final IconData icon;
-  final IconData activeIcon;
+  final IconData? icon;
+  final IconData? activeIcon;
+  final IconData? fontAwesomeIcon;
   final String label;
   final bool isSelected;
-  final Color color;
+  final Color selectedBackground;
+  final Color selectedForeground;
   final VoidCallback onTap;
 
   const _NavItem({
-    required this.icon,
-    required this.activeIcon,
+    this.icon,
+    this.activeIcon,
+    this.fontAwesomeIcon,
     required this.label,
     required this.isSelected,
-    required this.color,
+    required this.selectedBackground,
+    required this.selectedForeground,
     required this.onTap,
-  });
+  }) : assert(
+          (fontAwesomeIcon != null && icon == null && activeIcon == null) ||
+              (fontAwesomeIcon == null && icon != null && activeIcon != null),
+        );
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              isSelected ? activeIcon : icon,
-              size: 28,
-              color: isSelected ? color : AppTheme.textLight,
-            ),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-                color: isSelected ? color : AppTheme.textLight,
+    final inactiveColor = AppTheme.textLight;
+    final iconColor = isSelected ? selectedForeground : inactiveColor;
+    final pillRadius = BorderRadius.circular(999);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: pillRadius,
+        splashColor: isSelected
+            ? selectedForeground.withValues(alpha: 0.14)
+            : AppTheme.textLight.withValues(alpha: 0.2),
+        highlightColor: isSelected
+            ? selectedForeground.withValues(alpha: 0.08)
+            : AppTheme.textLight.withValues(alpha: 0.12),
+        child: Container(
+          width: double.infinity,
+          height: _kNavPillHeight,
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: isSelected ? selectedBackground : Colors.transparent,
+            borderRadius: pillRadius,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              fontAwesomeIcon != null
+                  ? FaIcon(
+                      fontAwesomeIcon,
+                      size: _kBottomNavIconSizeFa,
+                      color: iconColor,
+                    )
+                  : Icon(
+                      isSelected ? activeIcon! : icon!,
+                      size: _kBottomNavIconSizeMaterial,
+                      color: iconColor,
+                    ),
+              const SizedBox(height: 1),
+              Text(
+                label,
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      fontSize: 10,
+                      letterSpacing: 0.35,
+                      height: 1.05,
+                      fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                      color: isSelected ? selectedForeground : inactiveColor,
+                    ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

@@ -4,8 +4,10 @@ import 'package:intl/intl.dart';
 import 'package:fl_chart/fl_chart.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/main_app_title_bar.dart';
 import '../../../core/theme/edit_dialog_theme.dart';
 import '../../../core/db/isar_service.dart';
+import '../../../core/providers/record_stream_providers.dart';
 import '../../../core/widgets/edit_dialog_fields.dart';
 import '../../../core/widgets/edit_bottom_sheet.dart';
 import '../../../core/models/baby_profile.dart';
@@ -14,9 +16,15 @@ import '../../../core/percentiles_data.dart';
 
 class WeightView extends ConsumerStatefulWidget {
   final VoidCallback? onTitleTap;
+  final VoidCallback onSettingsTap;
   final ScrollController? scrollController;
 
-  const WeightView({super.key, this.onTitleTap, this.scrollController});
+  const WeightView({
+    super.key,
+    this.onTitleTap,
+    required this.onSettingsTap,
+    this.scrollController,
+  });
 
   @override
   ConsumerState<WeightView> createState() => _WeightViewState();
@@ -25,6 +33,11 @@ class WeightView extends ConsumerStatefulWidget {
 class _WeightViewState extends ConsumerState<WeightView> {
   final _weightController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
+  late final Future<BabyProfile?> _babyProfileFuture =
+      IsarService.getBabyProfile();
+
+  /// Misma altura visual que [ElevatedButton] de esta fila.
+  static const double _weightControlHeight = 56;
 
   @override
   void dispose() {
@@ -35,224 +48,358 @@ class _WeightViewState extends ConsumerState<WeightView> {
   Future<void> _registerWeight() async {
     if (!_formKey.currentState!.validate()) return;
 
-    final weight = double.tryParse(_weightController.text.trim().replaceAll(',', '.'));
+    final weight = double.tryParse(
+      _weightController.text.trim().replaceAll(',', '.'),
+    );
     if (weight == null || weight <= 0) return;
 
-    await IsarService.addWeightRecord(WeightRecord(weightKg: weight, dateTime: DateTime.now()));
+    await IsarService.addWeightRecord(
+      WeightRecord(weightKg: weight, dateTime: DateTime.now()),
+    );
     _weightController.clear();
   }
 
   @override
   Widget build(BuildContext context) {
+    final recordsAsync = ref.watch(weightRecordsStreamProvider);
     return Scaffold(
       backgroundColor: AppTheme.background,
-      appBar: AppBar(
-        title: InkWell(
-          onTap: widget.onTitleTap,
-          borderRadius: BorderRadius.circular(8),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Image.asset(AppTheme.titleIconAsset, width: 22, height: 22, fit: BoxFit.contain),
-                const SizedBox(width: 6),
-                Flexible(child: Text('MiBebé Diario', overflow: TextOverflow.ellipsis)),
-              ],
+      body: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            MainAppTitleBar(
+              onTitleTap: widget.onTitleTap,
+              onSettingsTap: widget.onSettingsTap,
             ),
-          ),
-        ),
-      ),
-      body: FutureBuilder<BabyProfile?>(
-        future: IsarService.getBabyProfile(),
-        builder: (context, babySnapshot) {
-          final baby = babySnapshot.data;
-          final isMale = baby?.isMale ?? true;
+            Expanded(
+              child: FutureBuilder<BabyProfile?>(
+                future: _babyProfileFuture,
+                builder: (context, babySnapshot) {
+                  final baby = babySnapshot.data;
+                  final isMale = baby?.isMale ?? true;
 
-          return GestureDetector(
-            onTap: () => FocusScope.of(context).unfocus(),
-            behavior: HitTestBehavior.opaque,
-            child: SingleChildScrollView(
-              controller: widget.scrollController,
-              padding: const EdgeInsets.all(20),
-              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-              child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Row(
-                          children: [
-                            Icon(Icons.monitor_weight, color: AppTheme.primaryGreen),
-                            const SizedBox(width: 8),
-                            Text(
-                              'Control de Peso',
-                              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                                    fontWeight: FontWeight.bold,
-                                    color: AppTheme.textDark,
+                  return GestureDetector(
+                    onTap: () => FocusScope.of(context).unfocus(),
+                    behavior: HitTestBehavior.opaque,
+                    child: SingleChildScrollView(
+                      controller: widget.scrollController,
+                      padding: const EdgeInsets.fromLTRB(
+                        AppTheme.screenEdgePadding,
+                        AppTheme.contentPaddingTopAfterTitleBar,
+                        AppTheme.screenEdgePadding,
+                        20,
+                      ),
+                      keyboardDismissBehavior:
+                          ScrollViewKeyboardDismissBehavior.onDrag,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Card(
+                            child: Padding(
+                              padding: const EdgeInsets.all(24),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Icon(
+                                        Icons.monitor_weight,
+                                        color: AppTheme.pageTitleIconWeight,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        'Control de Peso',
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .titleLarge
+                                            ?.copyWith(
+                                              fontWeight: FontWeight.bold,
+                                              color: AppTheme.textDark,
+                                            ),
+                                      ),
+                                    ],
                                   ),
+                                  const SizedBox(height: 24),
+                                  Form(
+                                    key: _formKey,
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.stretch,
+                                      children: [
+                                        Text(
+                                          'Peso (kg)',
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .titleSmall
+                                              ?.copyWith(
+                                                color: AppTheme.textLight,
+                                              ),
+                                        ),
+                                        const SizedBox(height: 8),
+                                        Row(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.center,
+                                          children: [
+                                            Expanded(
+                                              flex: 2,
+                                              child: SizedBox(
+                                                height: _weightControlHeight,
+                                                child: TextFormField(
+                                                  controller: _weightController,
+                                                  keyboardType:
+                                                      const TextInputType.numberWithOptions(
+                                                        decimal: true,
+                                                      ),
+                                                  textInputAction:
+                                                      TextInputAction.done,
+                                                  expands: true,
+                                                  maxLines: null,
+                                                  minLines: null,
+                                                  textAlignVertical:
+                                                      TextAlignVertical.center,
+                                                  decoration:
+                                                      const InputDecoration(
+                                                        hintText: 'Ej: 4.5',
+                                                        contentPadding:
+                                                            EdgeInsets.symmetric(
+                                                              horizontal: 20,
+                                                            ),
+                                                        isDense: false,
+                                                      ),
+                                                  validator: (v) {
+                                                    if (v == null ||
+                                                        v.trim().isEmpty) {
+                                                      return 'Introduce el peso';
+                                                    }
+                                                    final n = double.tryParse(
+                                                      v.trim().replaceAll(
+                                                        ',',
+                                                        '.',
+                                                      ),
+                                                    );
+                                                    if (n == null ||
+                                                        n <= 0 ||
+                                                        n > 50) {
+                                                      return 'Peso inválido';
+                                                    }
+                                                    return null;
+                                                  },
+                                                ),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 12),
+                                            Expanded(
+                                              child: SizedBox(
+                                                height: _weightControlHeight,
+                                                child: ElevatedButton(
+                                                  onPressed: _registerWeight,
+                                                  style: ElevatedButton.styleFrom(
+                                                    padding:
+                                                        const EdgeInsets.symmetric(
+                                                          horizontal: 12,
+                                                        ),
+                                                    minimumSize: const Size(
+                                                      0,
+                                                      _weightControlHeight,
+                                                    ),
+                                                    maximumSize: const Size(
+                                                      double.infinity,
+                                                      _weightControlHeight,
+                                                    ),
+                                                    fixedSize: const Size(
+                                                      double.infinity,
+                                                      _weightControlHeight,
+                                                    ),
+                                                    tapTargetSize:
+                                                        MaterialTapTargetSize
+                                                            .shrinkWrap,
+                                                    visualDensity:
+                                                        VisualDensity.compact,
+                                                  ),
+                                                  child: const FittedBox(
+                                                    fit: BoxFit.scaleDown,
+                                                    child: Text(
+                                                      'Registrar',
+                                                      overflow:
+                                                          TextOverflow.ellipsis,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(height: 24),
+                                  recordsAsync.when(
+                                    skipLoadingOnReload: true,
+                                    data: _summaryRow,
+                                    loading: () => const SizedBox(
+                                      height: 80,
+                                      child: Center(
+                                        child: CircularProgressIndicator(),
+                                      ),
+                                    ),
+                                    error: (e, _) => Padding(
+                                      padding: const EdgeInsets.all(8),
+                                      child: Text(
+                                        'No se pudieron cargar los pesos: $e',
+                                        style: TextStyle(
+                                          color: Theme.of(
+                                            context,
+                                          ).colorScheme.error,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
-                          ],
-                        ),
-                        const SizedBox(height: 24),
-                        Form(
-                          key: _formKey,
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Expanded(
-                                flex: 2,
+                          ),
+                          const SizedBox(height: 24),
+                          recordsAsync.when(
+                            skipLoadingOnReload: true,
+                            data: (records) => Card(
+                              child: Padding(
+                                padding: const EdgeInsets.all(24),
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      'Peso (kg)',
-                                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                                            color: AppTheme.textLight,
+                                      'Evolución',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleMedium
+                                          ?.copyWith(
+                                            fontWeight: FontWeight.bold,
                                           ),
                                     ),
-                                    const SizedBox(height: 8),
-                                    TextFormField(
-                                      controller: _weightController,
-                                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                      textInputAction: TextInputAction.done,
-                                      decoration: const InputDecoration(
-                                        hintText: 'Ej: 4.5',
+                                    const SizedBox(height: 16),
+                                    SizedBox(
+                                      height: 220,
+                                      child: _WeightChart(
+                                        records: records,
+                                        isMale: isMale,
+                                        birthDate:
+                                            baby?.birthDate ?? DateTime.now(),
                                       ),
-                                      validator: (v) {
-                                        if (v == null || v.trim().isEmpty) return 'Introduce el peso';
-                                        final n = double.tryParse(v.trim().replaceAll(',', '.'));
-                                        if (n == null || n <= 0 || n > 50) return 'Peso inválido';
-                                        return null;
-                                      },
                                     ),
+                                    if (records.isNotEmpty) ...[
+                                      const SizedBox(height: 12),
+                                      Row(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Container(
+                                            width: 20,
+                                            height: 3,
+                                            margin: const EdgeInsets.only(
+                                              top: 5,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: AppTheme.primaryGreen
+                                                  .withValues(alpha: 0.4),
+                                              borderRadius:
+                                                  BorderRadius.circular(2),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Expanded(
+                                            child: Text(
+                                              'Línea de referencia: percentil 50 (mediana) de peso por edad según los estándares de crecimiento infantil de la OMS.',
+                                              style: Theme.of(context)
+                                                  .textTheme
+                                                  .bodySmall
+                                                  ?.copyWith(
+                                                    color: AppTheme.textLight,
+                                                    height: 1.35,
+                                                  ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
                                   ],
                                 ),
                               ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Padding(
-                                  padding: const EdgeInsets.only(top: 32),
-                                  child: ElevatedButton(
-                                    onPressed: _registerWeight,
-                                    child: const FittedBox(
-                                      fit: BoxFit.scaleDown,
-                                      child: Text('Registrar', overflow: TextOverflow.ellipsis),
-                                    ),
-                                  ),
+                            ),
+                            loading: () => const Card(
+                              child: SizedBox(
+                                height: 200,
+                                child: Center(
+                                  child: CircularProgressIndicator(),
                                 ),
                               ),
-                            ],
+                            ),
+                            error: (_, _) => const SizedBox.shrink(),
                           ),
-                        ),
-                        const SizedBox(height: 24),
-                        StreamBuilder<List<WeightRecord>>(
-                          stream: IsarService.watchWeightRecords(),
-                          builder: (context, snapshot) {
-                            if (!snapshot.hasData) {
-                              return const SizedBox(height: 80, child: Center(child: CircularProgressIndicator()));
-                            }
-                            final records = snapshot.data!;
-                            final lastWeight = records.isNotEmpty ? records.first : null;
-                            final prevWeight = records.length > 1 ? records[1] : null;
-                            final change = lastWeight != null && prevWeight != null
-                                ? lastWeight.weightKg - prevWeight.weightKg
-                                : null;
-
-                            return Row(
+                          const SizedBox(height: 24),
+                          recordsAsync.when(
+                            skipLoadingOnReload: true,
+                            data: (records) => Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Expanded(
-                                  child: _SummaryCard(
-                                    title: 'Peso Actual',
-                                    value: lastWeight != null
-                                        ? '${lastWeight.weightKg.toStringAsFixed(2)} kg'
-                                        : 'Sin datos',
-                                  ),
+                                Text(
+                                  'Historial',
+                                  style: Theme.of(context).textTheme.titleMedium
+                                      ?.copyWith(fontWeight: FontWeight.bold),
                                 ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: _SummaryCard(
-                                    title: 'Cambio',
-                                    value: change != null
-                                        ? '${change >= 0 ? '+' : ''}${change.toStringAsFixed(2)} kg'
-                                        : '-',
-                                    isPositive: change != null && change >= 0,
-                                  ),
+                                const SizedBox(height: 12),
+                                ...records.map(
+                                  (r) => _WeightRecordTile(record: r),
                                 ),
                               ],
-                            );
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 24),
-                StreamBuilder<List<WeightRecord>>(
-                  stream: IsarService.watchWeightRecords(),
-                  builder: (context, snapshot) {
-                    if (!snapshot.hasData) {
-                      return const Card(child: SizedBox(height: 200, child: Center(child: CircularProgressIndicator())));
-                    }
-                    final records = snapshot.data!;
-                    return Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(24),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Evolución',
-                              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                    fontWeight: FontWeight.bold,
-                                  ),
                             ),
-                            const SizedBox(height: 16),
-                            SizedBox(
-                              height: 220,
-                              child: _WeightChart(
-                                records: records,
-                                isMale: isMale,
-                                birthDate: baby?.birthDate ?? DateTime.now(),
-                              ),
-                            ),
-                          ],
-                        ),
+                            loading: () => const SizedBox.shrink(),
+                            error: (_, _) => const SizedBox.shrink(),
+                          ),
+                        ],
                       ),
-                    );
-                  },
-                ),
-                const SizedBox(height: 24),
-                StreamBuilder<List<WeightRecord>>(
-                  stream: IsarService.watchWeightRecords(),
-                  builder: (context, snapshot) {
-                    if (!snapshot.hasData) return const SizedBox();
-                    final records = snapshot.data!;
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Historial',
-                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.bold,
-                              ),
-                        ),
-                        const SizedBox(height: 12),
-                        ...records.map((r) => _WeightRecordTile(record: r)),
-                      ],
-                    );
-                  },
-                ),
-              ],
+                    ),
+                  );
+                },
+              ),
             ),
-          ),
-          );
-        },
+          ],
+        ),
       ),
+    );
+  }
+
+  Widget _summaryRow(List<WeightRecord> records) {
+    final lastWeight = records.isNotEmpty ? records.first : null;
+    final prevWeight = records.length > 1 ? records[1] : null;
+    final change = lastWeight != null && prevWeight != null
+        ? lastWeight.weightKg - prevWeight.weightKg
+        : null;
+
+    return Row(
+      children: [
+        Expanded(
+          child: _SummaryCard(
+            title: 'Peso Actual',
+            value: lastWeight != null
+                ? '${lastWeight.weightKg.toStringAsFixed(2)} kg'
+                : 'Sin datos',
+            showTrendIcon: false,
+            valueColor: lastWeight != null ? Colors.black : null,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: _SummaryCard(
+            title: 'Tendencia',
+            value: change != null
+                ? '${change >= 0 ? '+' : ''}${change.toStringAsFixed(2)} kg'
+                : '-',
+            showTrendIcon: change != null,
+            isPositive: change != null && change >= 0,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -261,15 +408,35 @@ class _SummaryCard extends StatelessWidget {
   final String title;
   final String value;
   final bool isPositive;
+  final bool showTrendIcon;
+
+  /// Si no es null y hay valor, colorea el texto (p. ej. negro para peso actual).
+  final Color? valueColor;
 
   const _SummaryCard({
     required this.title,
     required this.value,
     this.isPositive = true,
+    this.showTrendIcon = true,
+    this.valueColor,
   });
 
   @override
   Widget build(BuildContext context) {
+    final empty = value == 'Sin datos' || value == '-';
+    Color resolvedColor;
+    if (empty) {
+      resolvedColor = AppTheme.textLight;
+    } else if (valueColor != null) {
+      resolvedColor = valueColor!;
+    } else if (showTrendIcon) {
+      resolvedColor = isPositive
+          ? AppTheme.trendPositiveGreen
+          : AppTheme.trendNegativeRed;
+    } else {
+      resolvedColor = AppTheme.textDark;
+    }
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -281,28 +448,28 @@ class _SummaryCard extends StatelessWidget {
         children: [
           Text(
             title,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: AppTheme.textLight,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: AppTheme.textLight),
           ),
           const SizedBox(height: 4),
           Row(
             children: [
-              if (value != '-' && value != 'Sin datos')
+              if (showTrendIcon && !empty)
                 Icon(
                   isPositive ? Icons.trending_up : Icons.trending_down,
                   size: 20,
-                  color: isPositive ? AppTheme.primaryGreen : Colors.red,
+                  color: resolvedColor,
                 ),
-              if (value != '-' && value != 'Sin datos') const SizedBox(width: 4),
-              Text(
-                value,
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: value == 'Sin datos' || value == '-'
-                          ? AppTheme.textLight
-                          : (isPositive ? AppTheme.primaryGreen : Colors.red),
-                    ),
+              if (showTrendIcon && !empty) const SizedBox(width: 4),
+              Flexible(
+                child: Text(
+                  value,
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: resolvedColor,
+                  ),
+                ),
               ),
             ],
           ),
@@ -338,17 +505,28 @@ class _WeightChart extends StatelessWidget {
       );
     }
 
-    final sortedRecords = List<WeightRecord>.from(records)..sort((a, b) => a.dateTime.compareTo(b.dateTime));
+    final sortedRecords = List<WeightRecord>.from(records)
+      ..sort((a, b) => a.dateTime.compareTo(b.dateTime));
     final n = sortedRecords.length;
 
     // Eje X: índice (0, 1, 2...) para mostrar fechas en el eje inferior
-    final spots = sortedRecords.asMap().entries.map((e) => FlSpot(e.key.toDouble(), e.value.weightKg)).toList();
+    final spots = sortedRecords
+        .asMap()
+        .entries
+        .map((e) => FlSpot(e.key.toDouble(), e.value.weightKg))
+        .toList();
 
-    final minWeight = records.map((r) => r.weightKg).reduce((a, b) => a < b ? a : b);
-    final maxWeight = records.map((r) => r.weightKg).reduce((a, b) => a > b ? a : b);
+    final minWeight = records
+        .map((r) => r.weightKg)
+        .reduce((a, b) => a < b ? a : b);
+    final maxWeight = records
+        .map((r) => r.weightKg)
+        .reduce((a, b) => a > b ? a : b);
 
     // Percentil P50 en el rango de edad de los registros
-    final minMonth = _ageInMonths(sortedRecords.first.dateTime).clamp(0.0, 12.0);
+    final minMonth = _ageInMonths(
+      sortedRecords.first.dateTime,
+    ).clamp(0.0, 12.0);
     final maxMonth = _ageInMonths(sortedRecords.last.dateTime).clamp(0.0, 12.0);
     final p50Min = PercentilesData.getP50Weight(isMale, minMonth);
     final p50Max = PercentilesData.getP50Weight(isMale, maxMonth);
@@ -363,7 +541,10 @@ class _WeightChart extends StatelessWidget {
 
     final refSpots = sortedRecords.asMap().entries.map((e) {
       final age = _ageInMonths(e.value.dateTime);
-      return FlSpot(e.key.toDouble(), PercentilesData.getP50Weight(isMale, age));
+      return FlSpot(
+        e.key.toDouble(),
+        PercentilesData.getP50Weight(isMale, age),
+      );
     }).toList();
 
     return LineChart(
@@ -376,10 +557,8 @@ class _WeightChart extends StatelessWidget {
           show: true,
           drawVerticalLine: false,
           horizontalInterval: 0.5,
-          getDrawingHorizontalLine: (value) => FlLine(
-            color: Colors.grey.withValues(alpha: 0.2),
-            strokeWidth: 1,
-          ),
+          getDrawingHorizontalLine: (value) =>
+              FlLine(color: Colors.grey.withValues(alpha: 0.2), strokeWidth: 1),
         ),
         titlesData: FlTitlesData(
           leftTitles: AxisTitles(
@@ -388,10 +567,7 @@ class _WeightChart extends StatelessWidget {
               reservedSize: 32,
               getTitlesWidget: (value, meta) => Text(
                 value.toStringAsFixed(1),
-                style: TextStyle(
-                  color: AppTheme.textLight,
-                  fontSize: 10,
-                ),
+                style: TextStyle(color: AppTheme.textLight, fontSize: 10),
               ),
               interval: 0.5,
             ),
@@ -407,10 +583,7 @@ class _WeightChart extends StatelessWidget {
                     padding: const EdgeInsets.only(top: 8),
                     child: Text(
                       DateFormat('d/M').format(sortedRecords[idx].dateTime),
-                      style: TextStyle(
-                        color: AppTheme.textLight,
-                        fontSize: 10,
-                      ),
+                      style: TextStyle(color: AppTheme.textLight, fontSize: 10),
                     ),
                   );
                 }
@@ -419,8 +592,12 @@ class _WeightChart extends StatelessWidget {
               interval: 1,
             ),
           ),
-          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          topTitles: const AxisTitles(
+            sideTitles: SideTitles(showTitles: false),
+          ),
+          rightTitles: const AxisTitles(
+            sideTitles: SideTitles(showTitles: false),
+          ),
         ),
         borderData: FlBorderData(show: false),
         lineBarsData: [
@@ -443,7 +620,11 @@ class _WeightChart extends StatelessWidget {
             dotData: FlDotData(
               show: true,
               getDotPainter: (spot, percent, barData, index) =>
-                  FlDotCirclePainter(radius: 4, color: AppTheme.textDark, strokeWidth: 0),
+                  FlDotCirclePainter(
+                    radius: 4,
+                    color: AppTheme.textDark,
+                    strokeWidth: 0,
+                  ),
             ),
             belowBarData: BarAreaData(show: false),
           ),
@@ -478,7 +659,9 @@ class _WeightRecordTile extends StatelessWidget {
             ),
             IconButton(
               icon: const Icon(Icons.delete, color: Colors.red, size: 20),
-              onPressed: record.id != null ? () => IsarService.deleteWeightRecord(record.id!) : () {},
+              onPressed: record.id != null
+                  ? () => IsarService.deleteWeightRecord(record.id!)
+                  : () {},
             ),
           ],
         ),
@@ -488,7 +671,11 @@ class _WeightRecordTile extends StatelessWidget {
 
   void _showEditDialog(BuildContext context, WeightRecord record) {
     final controller = TextEditingController(text: record.weightKg.toString());
-    var selectedDate = DateTime(record.dateTime.year, record.dateTime.month, record.dateTime.day);
+    var selectedDate = DateTime(
+      record.dateTime.year,
+      record.dateTime.month,
+      record.dateTime.day,
+    );
     var selectedTime = TimeOfDay.fromDateTime(record.dateTime);
     showModalBottomSheet(
       context: context,
@@ -503,14 +690,16 @@ class _WeightRecordTile extends StatelessWidget {
               Text(
                 'Peso (kg)',
                 style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                      fontWeight: FontWeight.w600,
-                      color: AppTheme.textDark,
-                    ),
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.textDark,
+                ),
               ),
               const SizedBox(height: 10),
               TextField(
                 controller: controller,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
                 textInputAction: TextInputAction.done,
                 decoration: InputDecoration(
                   hintText: 'Ej: 4.5',
@@ -541,13 +730,20 @@ class _WeightRecordTile extends StatelessWidget {
           ),
           onCancel: () => Navigator.pop(ctx),
           onSave: () async {
-            final w = double.tryParse(controller.text.trim().replaceAll(',', '.'));
+            final w = double.tryParse(
+              controller.text.trim().replaceAll(',', '.'),
+            );
             if (w != null && w > 0) {
               final dt = DateTime(
-                selectedDate.year, selectedDate.month, selectedDate.day,
-                selectedTime.hour, selectedTime.minute,
+                selectedDate.year,
+                selectedDate.month,
+                selectedDate.day,
+                selectedTime.hour,
+                selectedTime.minute,
               );
-              await IsarService.updateWeightRecord(record.copyWith(weightKg: w, dateTime: dt));
+              await IsarService.updateWeightRecord(
+                record.copyWith(weightKg: w, dateTime: dt),
+              );
               if (ctx.mounted) Navigator.pop(ctx);
             }
           },

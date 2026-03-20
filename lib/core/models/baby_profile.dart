@@ -7,6 +7,8 @@ class BabyProfile {
   final DateTime? createdAt;
   /// Foto en base64 (data:image/jpeg;base64,...) o URL de Firebase Storage
   final String? photoUrl;
+  /// Altura actual en centímetros (opcional).
+  final double? heightCm;
 
   BabyProfile({
     this.id,
@@ -15,6 +17,7 @@ class BabyProfile {
     required this.birthDate,
     this.createdAt,
     this.photoUrl,
+    this.heightCm,
   });
 
   BabyProfile copyWith({
@@ -24,6 +27,11 @@ class BabyProfile {
     DateTime? birthDate,
     DateTime? createdAt,
     String? photoUrl,
+    double? heightCm,
+    /// Si es true, se asigna [photoUrl] tal cual (puede ser null para borrar la foto).
+    bool setPhotoUrl = false,
+    /// Si es true, se asigna [heightCm] tal cual (puede ser null para borrar).
+    bool setHeightCm = false,
   }) =>
       BabyProfile(
         id: id ?? this.id,
@@ -31,7 +39,8 @@ class BabyProfile {
         isMale: isMale ?? this.isMale,
         birthDate: birthDate ?? this.birthDate,
         createdAt: createdAt ?? this.createdAt,
-        photoUrl: photoUrl ?? this.photoUrl,
+        photoUrl: setPhotoUrl ? photoUrl : (photoUrl ?? this.photoUrl),
+        heightCm: setHeightCm ? heightCm : (heightCm ?? this.heightCm),
       );
 
   /// Edad en meses decimales desde el nacimiento

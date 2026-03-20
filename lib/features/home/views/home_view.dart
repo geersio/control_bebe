@@ -2,11 +2,11 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:material_design_icons_flutter/material_design_icons_flutter.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/main_app_title_bar.dart';
 import '../../../core/utils/format_duration.dart';
 import '../../../core/utils/photo_picker.dart';
 import '../../../core/db/isar_service.dart';
@@ -16,8 +16,8 @@ import '../../../core/models/feeding_record.dart';
 import '../../../core/models/weight_record.dart';
 import '../../settings/views/settings_page.dart';
 import '../../../core/models/enums.dart';
-import '../../../core/percentiles_data.dart';
 import '../../../core/services/sabias_que_service.dart';
+
 class HomeView extends ConsumerStatefulWidget {
   final void Function(int index)? onNavigateToTab;
   final VoidCallback? onTitleTap;
@@ -29,29 +29,16 @@ class HomeView extends ConsumerStatefulWidget {
 }
 
 class _HomeViewState extends ConsumerState<HomeView> {
-  List<String> _cardOrder = ['weight', 'feeding', 'diapers'];
   BabyProfile? _cachedBaby;
-  int _homeDataKey = 0;
+  /// Perfil mostrado en la cabecera tras cambiar solo la foto (sin recargar todo el home).
+  BabyProfile? _babyProfileOverride;
+  late Future<Map<String, dynamic>> _homeDataFuture;
   final _sabiasQueService = SabiasQueServiceDefault();
 
   @override
   void initState() {
     super.initState();
-    _loadCardOrder();
-  }
-
-  Future<void> _loadCardOrder() async {
-    final order = await IsarService.getHomeCardOrder();
-    if (mounted) setState(() => _cardOrder = order);
-  }
-
-  Future<void> _onReorder(int oldIndex, int newIndex) async {
-    if (newIndex > oldIndex) newIndex--;
-    final newOrder = List<String>.from(_cardOrder);
-    final item = newOrder.removeAt(oldIndex);
-    newOrder.insert(newIndex, item);
-    setState(() => _cardOrder = newOrder);
-    await IsarService.setHomeCardOrder(newOrder);
+    _homeDataFuture = _loadHomeData();
   }
 
   Future<void> _handlePhotoTap(BabyProfile? baby) async {
@@ -65,22 +52,87 @@ class _HomeViewState extends ConsumerState<HomeView> {
       }
       return;
     }
+
+    final hasPhoto = baby.photoUrl != null && baby.photoUrl!.isNotEmpty;
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetCtx) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.photo_library_outlined),
+                title: const Text('Elegir foto'),
+                onTap: () => Navigator.pop(sheetCtx, 'pick'),
+              ),
+              if (hasPhoto)
+                ListTile(
+                  leading: Icon(Icons.delete_outline, color: Theme.of(sheetCtx).colorScheme.error),
+                  title: Text(
+                    'Quitar foto del perfil',
+                    style: TextStyle(color: Theme.of(sheetCtx).colorScheme.error),
+                  ),
+                  onTap: () => Navigator.pop(sheetCtx, 'remove'),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+
+    if (!mounted || choice == null) return;
+
+    if (choice == 'remove') {
+      try {
+        final updated = baby.copyWith(setPhotoUrl: true, photoUrl: null);
+        await IsarService.saveBabyProfile(updated);
+        if (mounted) {
+          setState(() {
+            _babyProfileOverride = updated;
+            _cachedBaby = updated;
+          });
+        }
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Foto del perfil eliminada')),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error al quitar la foto: $e')),
+          );
+        }
+      }
+      return;
+    }
+
+    if (choice != 'pick') return;
+
     try {
       final photoUrl = await pickAndProcessBabyPhoto();
       if (photoUrl == null || !mounted) return;
       final updated = baby.copyWith(photoUrl: photoUrl);
       await IsarService.saveBabyProfile(updated);
-      if (mounted) setState(() => _homeDataKey++);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Foto actualizada')),
-        );
+        setState(() {
+          _babyProfileOverride = updated;
+          _cachedBaby = updated;
+        });
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Foto actualizada')));
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al subir la foto: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error al subir la foto: $e')));
       }
     }
   }
@@ -101,130 +153,92 @@ class _HomeViewState extends ConsumerState<HomeView> {
     }
   }
 
+  Future<void> _openSettings(
+    BuildContext context, {
+    BabyProfile? currentBaby,
+  }) async {
+    BabyProfile? initial = currentBaby ?? _cachedBaby;
+    if (initial == null) {
+      initial = await IsarService.getBabyProfile();
+    }
+    if (!context.mounted) return;
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => SettingsPage(
+          initialBaby: initial,
+          onProfileSaved: (profile) {
+            if (!mounted) return;
+            setState(() {
+              _cachedBaby = profile;
+              _babyProfileOverride = null;
+              _homeDataFuture = _loadHomeData();
+            });
+          },
+        ),
+      ),
+    );
+    if (mounted) setState(() {});
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppTheme.background,
-      appBar: AppBar(
-        title: InkWell(
-          onTap: widget.onTitleTap,
-          borderRadius: BorderRadius.circular(8),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Image.asset(AppTheme.titleIconAsset, width: 22, height: 22, fit: BoxFit.contain),
-                const SizedBox(width: 6),
-                Flexible(child: Text('MiBebé Diario', overflow: TextOverflow.ellipsis)),
+      body: SafeArea(
+        child: FutureBuilder<Map<String, dynamic>>(
+          future: _homeDataFuture,
+          builder: (context, snapshot) {
+            final data = snapshot.data;
+            final babyFromFuture =
+                data != null ? data['baby'] as BabyProfile? : null;
+            final baby = _babyProfileOverride ?? babyFromFuture;
+            return CustomScrollView(
+              physics: const BouncingScrollPhysics(),
+              slivers: [
+                SliverToBoxAdapter(
+                  child: MainAppTitleBar(
+                    onTitleTap: widget.onTitleTap,
+                    onSettingsTap: () =>
+                        _openSettings(context, currentBaby: baby),
+                  ),
+                ),
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppTheme.screenEdgePadding,
+                    AppTheme.contentPaddingTopAfterTitleBar,
+                    AppTheme.screenEdgePadding,
+                    100,
+                  ),
+                  sliver: SliverList(
+                    delegate: SliverChildListDelegate([
+                      if (!snapshot.hasData) ...[
+                        const _HomeCardsSkeleton(),
+                      ] else ...[
+                        _ProfileSummaryCard(
+                          baby: baby,
+                          weightKg: (data!['weight'] as _WeightData).currentKg,
+                          onPhotoTap: () => _handlePhotoTap(baby),
+                        ),
+                        const SizedBox(height: 24),
+                        _ResumenDeHoyBlock(
+                          weight: data['weight'] as _WeightData,
+                          feeding: data['feeding'] as _FeedingData,
+                          diapers: data['diapers'] as _DiapersData,
+                          onTapWeight: () => _navigateTo('weight'),
+                          onTapFeeding: () => _navigateTo('feeding'),
+                          onTapDiapers: () => _navigateTo('diapers'),
+                        ),
+                        const SizedBox(height: 20),
+                        _ConsejoDelDiaCard(text: data['sabiasQue'] as String?),
+                      ],
+                    ]),
+                  ),
+                ),
               ],
-            ),
-          ),
+            );
+          },
         ),
-      ),
-      body: FutureBuilder<Map<String, dynamic>>(
-        key: ValueKey(_homeDataKey),
-        future: _loadHomeData(),
-        builder: (context, snapshot) {
-          if (!snapshot.hasData) {
-            return const _HomeLoadingState();
-          }
-          final data = snapshot.data!;
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                child: _BabyProfileCard(
-                  baby: data['baby'] as BabyProfile?,
-                  sabiasQueText: data['sabiasQue'] as String?,
-                  onPhotoTap: () => _handlePhotoTap(data['baby'] as BabyProfile?),
-                  onSettingsTap: () async {
-                    await Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => SettingsPage(
-                          initialBaby: data['baby'] as BabyProfile?,
-                          onProfileSaved: (profile) {
-                            if (mounted) setState(() => _cachedBaby = profile);
-                          },
-                        ),
-                      ),
-                    );
-                    if (mounted) setState(() {});
-                  },
-                ),
-              ),
-              const SizedBox(height: 16),
-              Expanded(
-                child: Stack(
-                  children: [
-                    ReorderableListView(
-                      buildDefaultDragHandles: false,
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 56),
-                      onReorder: _onReorder,
-                      proxyDecorator: (child, index, animation) => Material(
-                        elevation: 4,
-                        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
-                        child: child,
-                      ),
-                      children: _cardOrder.asMap().entries.map((entry) {
-                        final index = entry.key;
-                        final id = entry.value;
-                        final key = ValueKey(id);
-                        switch (id) {
-                          case 'weight':
-                            return _WeightCard(
-                              key: key,
-                              index: index,
-                              data: data['weight'] as _WeightData,
-                              onTap: () => _navigateTo('weight'),
-                            );
-                          case 'feeding':
-                            return _FeedingCard(
-                              key: key,
-                              index: index,
-                              data: data['feeding'] as _FeedingData,
-                              onTap: () => _navigateTo('feeding'),
-                            );
-                          case 'diapers':
-                            return _DiapersCard(
-                              key: key,
-                              index: index,
-                              data: data['diapers'] as _DiapersData,
-                              onTap: () => _navigateTo('diapers'),
-                            );
-                          default:
-                            return const SizedBox(key: ValueKey('unknown'));
-                        }
-                      }).toList(),
-                    ),
-                    Positioned(
-                      left: 0,
-                      right: 0,
-                      bottom: 0,
-                      height: 48,
-                      child: IgnorePointer(
-                        child: Container(
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                              colors: [
-                                AppTheme.background.withValues(alpha: 0),
-                                AppTheme.background,
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          );
-        },
       ),
     );
   }
@@ -233,57 +247,60 @@ class _HomeViewState extends ConsumerState<HomeView> {
     final cachedBaby = _cachedBaby;
     _cachedBaby = null;
     final results = await Future.wait([
-      cachedBaby != null ? Future.value(cachedBaby) : IsarService.getBabyProfile(),
+      cachedBaby != null
+          ? Future.value(cachedBaby)
+          : IsarService.getBabyProfile(),
       IsarService.getWeightRecords(),
-      IsarService.getFeedingRecordsToday(),
       IsarService.getLastFeedingRecord(),
       IsarService.getDiaperRecordsToday(),
-      IsarService.getDiaperRecordsLast7Days(),
       IsarService.getLastDiaperRecord(),
       _sabiasQueService.getFact(),
     ]);
     final baby = results[0] as BabyProfile?;
     final weightRecords = results[1] as List<WeightRecord>;
-    final feedingToday = results[2] as List<FeedingRecord>;
-    final lastFeeding = results[3] as FeedingRecord?;
-    final diapersToday = results[4] as List<DiaperRecord>;
-    final diapersLast7 = results[5] as List<DiaperRecord>;
-    final lastDiaper = results[6] as DiaperRecord?;
-    final sabiasQue = results[7] as String?;
+    final lastFeeding = results[2] as FeedingRecord?;
+    final diapersToday = results[3] as List<DiaperRecord>;
+    final lastDiaperRecord = results[4] as DiaperRecord?;
+    final sabiasQue = results[5] as String?;
 
     final lastWeight = weightRecords.isNotEmpty ? weightRecords.first : null;
     final prevWeight = weightRecords.length > 1 ? weightRecords[1] : null;
-    final changeKg = lastWeight != null && prevWeight != null
-        ? lastWeight.weightKg - prevWeight.weightKg
-        : null;
 
-    var breastMinutes = 0;
-    var breastCount = 0;
-    var bottleMl = 0;
-    var bottleCount = 0;
-    for (final f in feedingToday) {
-      switch (f.type) {
-        case FeedingType.leftBreast:
-        case FeedingType.rightBreast:
-          breastCount++;
-          breastMinutes += f.durationSeconds ?? 0;
-          break;
-        case FeedingType.bottle:
-          bottleCount++;
-          bottleMl += f.amountMl ?? 0;
-          break;
+    int? weeklyDeltaG;
+    if (lastWeight != null && prevWeight != null) {
+      final daysSinceWeigh = DateTime.now()
+          .difference(lastWeight.dateTime)
+          .inDays;
+      if (daysSinceWeigh <= 7) {
+        weeklyDeltaG = ((lastWeight.weightKg - prevWeight.weightKg) * 1000)
+            .round();
       }
     }
 
     int? lastFeedingMinutesAgo;
-    String? lastFeedingType;
+    String? lastFeedingDetail;
+    DateTime? lastFeedingAt;
     if (lastFeeding != null) {
-      lastFeedingMinutesAgo = DateTime.now().difference(lastFeeding.dateTime).inMinutes;
-      lastFeedingType = switch (lastFeeding.type) {
-        FeedingType.leftBreast => 'Izquierda',
-        FeedingType.rightBreast => 'Derecha',
-        FeedingType.bottle => 'Biberón',
-      };
+      lastFeedingAt = lastFeeding.dateTime;
+      lastFeedingMinutesAgo = DateTime.now()
+          .difference(lastFeeding.dateTime)
+          .inMinutes;
+      switch (lastFeeding.type) {
+        case FeedingType.leftBreast:
+          final sec = lastFeeding.durationSeconds ?? 0;
+          final min = (sec / 60).round();
+          lastFeedingDetail = sec > 0 ? 'Izquierda • $min min' : 'Izquierda';
+          break;
+        case FeedingType.rightBreast:
+          final sec = lastFeeding.durationSeconds ?? 0;
+          final min = (sec / 60).round();
+          lastFeedingDetail = sec > 0 ? 'Derecha • $min min' : 'Derecha';
+          break;
+        case FeedingType.bottle:
+          final ml = lastFeeding.amountMl ?? 0;
+          lastFeedingDetail = 'Biberón • $ml ml';
+          break;
+      }
     }
 
     var wetCount = 0;
@@ -304,276 +321,337 @@ class _HomeViewState extends ConsumerState<HomeView> {
     }
 
     final totalToday = wetCount + dirtyCount;
-    final avg7Days = diapersLast7.isNotEmpty ? diapersLast7.length / 7 : 0.0;
-
-    int? lastDiaperMinutesAgo;
-    String? lastDiaperType;
-    if (lastDiaper != null) {
-      lastDiaperMinutesAgo = DateTime.now().difference(lastDiaper.dateTime).inMinutes;
-      lastDiaperType = switch (lastDiaper.type) {
-        DiaperType.wet => 'Mojado',
-        DiaperType.dirty => 'Sucio',
-        DiaperType.both => 'Ambos',
-      };
-    }
-
-    double? diffFromP50;
-    if (lastWeight != null && baby != null) {
-      final ageMonths = lastWeight.dateTime.difference(baby.birthDate).inDays / 30.44;
-      final p50 = PercentilesData.getP50Weight(baby.isMale, ageMonths);
-      diffFromP50 = lastWeight.weightKg - p50;
-    }
 
     return {
       'baby': baby,
       'sabiasQue': sabiasQue,
       'weight': _WeightData(
         currentKg: lastWeight?.weightKg,
-        changeKg: changeKg,
-        weighedDate: lastWeight?.dateTime,
-        diffFromP50Kg: diffFromP50,
+        weeklyDeltaGrams: weeklyDeltaG,
+        lastRecordedAt: lastWeight?.dateTime,
       ),
       'feeding': _FeedingData(
-        breastMinutes: breastMinutes ~/ 60,
-        breastCount: breastCount,
-        bottleMl: bottleMl,
-        bottleCount: bottleCount,
         lastFeedingMinutesAgo: lastFeedingMinutesAgo,
-        lastFeedingType: lastFeedingType,
+        lastFeedingDetail: lastFeedingDetail,
+        lastFeedingAt: lastFeedingAt,
       ),
       'diapers': _DiapersData(
         wetCount: wetCount,
         dirtyCount: dirtyCount,
         totalToday: totalToday,
-        avg7Days: avg7Days,
-        lastChangeMinutesAgo: lastDiaperMinutesAgo,
-        lastChangeType: lastDiaperType,
+        lastRecordedAt: lastDiaperRecord?.dateTime,
       ),
     };
   }
 }
 
-/// Ficha fija con datos del bebé y "Sabías que...". No es reordenable.
-class _BabyProfileCard extends StatelessWidget {
-  final BabyProfile? baby;
-  final String? sabiasQueText;
-  final VoidCallback? onPhotoTap;
-  final VoidCallback? onSettingsTap;
+// --- Tarjeta perfil central ---
 
-  const _BabyProfileCard({
-    this.baby,
-    this.sabiasQueText,
-    this.onPhotoTap,
-    this.onSettingsTap,
-  });
+/// Avatar con anillo degradado (azul claro arriba → primario abajo), halo blanco y sombra.
+class _ProfileGradientAvatarRing extends StatelessWidget {
+  /// Diámetro exterior del anillo (degradado + halo).
+  static const double outerDiameter = 128;
+  static const double _ringThickness = 5;
+  static const double _whiteInset = 3;
 
-  Widget _buildPhotoImage(String photoUrl, bool isMale) {
-    if (photoUrl.startsWith('data:')) {
-      try {
-        final base64 = photoUrl.split(',').last;
-        final bytes = base64Decode(base64);
-        return Image.memory(
-          bytes,
-          fit: BoxFit.cover,
-          width: 56,
-          height: 56,
-          errorBuilder: (_, _, _) => Icon(
-            isMale ? Icons.face : Icons.face_3,
-            color: AppTheme.textLight,
-            size: 32,
-          ),
-        );
-      } catch (_) {
-        return Icon(isMale ? Icons.face : Icons.face_3, color: AppTheme.textLight, size: 32);
-      }
-    }
-    return Image.network(
-      photoUrl,
-      fit: BoxFit.cover,
-      width: 56,
-      height: 56,
-      errorBuilder: (_, _, _) => Icon(
-        isMale ? Icons.face : Icons.face_3,
-        color: AppTheme.textLight,
-        size: 32,
-      ),
-    );
-  }
+  final Widget child;
 
-  String _formatAge(DateTime birthDate) {
-    final totalDays = DateTime.now().difference(birthDate).inDays;
-    if (totalDays < 30) {
-      return '$totalDays día${totalDays != 1 ? 's' : ''}';
-    }
-    final months = totalDays ~/ 30;
-    final days = totalDays % 30;
-    return '$months mes${months != 1 ? 'es' : ''} y $days día${days != 1 ? 's' : ''}';
-  }
+  const _ProfileGradientAvatarRing({required this.child});
 
   @override
   Widget build(BuildContext context) {
-    final isMale = baby?.isMale ?? true;
-    final accentColor = isMale ? AppTheme.primaryBlue : AppTheme.primaryPink;
-    final name = baby?.name ?? 'Bebé';
-    final age = baby != null ? _formatAge(baby!.birthDate) : null;
-    final fact = sabiasQueText ?? 'Los bebés pueden reconocer la voz de su madre desde el útero.';
-
-    return Card(
-      margin: EdgeInsets.zero,
-      color: const Color(0xFFF5F5F5),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                GestureDetector(
-                  onTap: onPhotoTap,
-                  child: SizedBox(
-                    width: 56,
-                    height: 56,
-                    child: Stack(
-                      clipBehavior: Clip.none,
-                      children: [
-                        Container(
-                          width: 56,
-                          height: 56,
-                          decoration: BoxDecoration(
-                            color: AppTheme.fieldBackground,
-                            shape: BoxShape.circle,
-                            border: Border.all(color: AppTheme.fieldBorder, width: 1.5),
-                          ),
-                          clipBehavior: Clip.antiAlias,
-                          child: baby?.photoUrl != null && baby!.photoUrl!.isNotEmpty
-                              ? _buildPhotoImage(baby!.photoUrl!, isMale)
-                              : Icon(
-                                  isMale ? Icons.face : Icons.face_3,
-                                  color: AppTheme.textLight,
-                                  size: 32,
-                                ),
-                        ),
-                        if (onPhotoTap != null && (baby?.photoUrl == null || baby!.photoUrl!.isEmpty))
-                          Positioned(
-                            right: -2,
-                            bottom: -2,
-                            child: Container(
-                              width: 18,
-                              height: 18,
-                              decoration: BoxDecoration(
-                                color: AppTheme.primaryPink,
-                                shape: BoxShape.circle,
-                                border: Border.all(color: Colors.white, width: 1.5),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withValues(alpha: 0.15),
-                                    blurRadius: 3,
-                                    offset: const Offset(0, 1),
-                                  ),
-                                ],
-                              ),
-                              child: const Icon(
-                                Icons.add,
-                                color: Colors.white,
-                                size: 12,
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Text(
-                            name,
-                            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                  color: AppTheme.textDark,
-                                ),
-                          ),
-                          const SizedBox(width: 6),
-                          Icon(
-                            isMale ? Icons.male : Icons.female,
-                            size: 20,
-                            color: accentColor,
-                          ),
-                        ],
-                      ),
-                      if (age != null) ...[
-                        const SizedBox(height: 4),
-                        Row(
-                          children: [
-                            Icon(Icons.calendar_today, size: 14, color: AppTheme.textLight),
-                            const SizedBox(width: 6),
-                            Text(
-                              age,
-                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                    color: AppTheme.textLight,
-                                  ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                if (onSettingsTap != null)
-                  IconButton(
-                    onPressed: onSettingsTap,
-                    icon: Icon(Icons.settings_outlined, color: AppTheme.textLight),
-                    style: IconButton.styleFrom(
-                      padding: const EdgeInsets.all(8),
-                      minimumSize: const Size(40, 40),
-                    ),
-                  ),
-              ],
+    final topBlue = Color.lerp(Colors.white, AppTheme.palettePrimary, 0.42)!;
+    return SizedBox(
+      width: outerDiameter,
+      height: outerDiameter,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [topBlue, AppTheme.palettePrimary],
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: AppTheme.palettePrimary.withValues(alpha: 0.28),
+              blurRadius: 10,
+              spreadRadius: 0,
+              offset: const Offset(0, 4),
             ),
-            if (sabiasQueText != null || fact.isNotEmpty) ...[
-              const SizedBox(height: 20),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(AppTheme.fieldRadius),
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.06),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(_ringThickness),
+          child: DecoratedBox(
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.white,
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(_whiteInset),
+              child: ClipOval(
+                child: Stack(
+                  fit: StackFit.expand,
                   children: [
-                    Icon(Icons.auto_awesome, size: 18, color: AppTheme.textDark),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'SABÍAS QUE...',
-                            style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                                  fontWeight: FontWeight.w600,
-                                  color: AppTheme.textDark,
-                                  letterSpacing: 0.5,
-                                ),
+                    child,
+                    // Sombra interior suave en la parte superior del recorte
+                    IgnorePointer(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.center,
+                            colors: [
+                              Colors.black.withValues(alpha: 0.07),
+                              Colors.black.withValues(alpha: 0),
+                            ],
                           ),
-                          const SizedBox(height: 4),
-                          Text(
-                            fact,
-                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                  color: AppTheme.textDark,
-                                ),
-                          ),
-                        ],
+                        ),
                       ),
                     ),
                   ],
                 ),
               ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Interior del avatar vacío (solo fondo + cara Material).
+class _BabyPhotoPlaceholderInner extends StatelessWidget {
+  final bool isMale;
+
+  const _BabyPhotoPlaceholderInner({required this.isMale});
+
+  @override
+  Widget build(BuildContext context) {
+    return ColoredBox(
+      color: const Color(0xFFF2F4F5),
+      child: Center(
+        child: Icon(
+          isMale ? Icons.face : Icons.face_3,
+          size: 46,
+          color: AppTheme.palettePrimary,
+        ),
+      ),
+    );
+  }
+}
+
+/// Botón “+” que sobresale del círculo, en esquina inferior derecha.
+class _AddPhotoBadgeOutside extends StatelessWidget {
+  const _AddPhotoBadgeOutside();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 30,
+      height: 30,
+      decoration: BoxDecoration(
+        color: AppTheme.palettePrimary,
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.white, width: 2.5),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.18),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      alignment: Alignment.center,
+      child: const Icon(Icons.add, size: 18, color: Colors.white),
+    );
+  }
+}
+
+/// Placeholder completo: anillo + cara; el “+” va fuera del recorte oval (sobrepuesto al redondel).
+class _AvatarPlaceholderWithOutsideBadge extends StatelessWidget {
+  final bool isMale;
+
+  const _AvatarPlaceholderWithOutsideBadge({required this.isMale});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: _ProfileGradientAvatarRing.outerDiameter,
+      height: _ProfileGradientAvatarRing.outerDiameter,
+      child: Stack(
+        clipBehavior: Clip.none,
+        alignment: Alignment.center,
+        children: [
+          _ProfileGradientAvatarRing(
+            child: _BabyPhotoPlaceholderInner(isMale: isMale),
+          ),
+          // Mitad del badge asoma fuera del círculo; mantiene la esquina inferior derecha del avatar.
+          const Positioned(
+            right: -2,
+            bottom: -2,
+            child: _AddPhotoBadgeOutside(),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProfileSummaryCard extends StatelessWidget {
+  final BabyProfile? baby;
+  final double? weightKg;
+  final VoidCallback onPhotoTap;
+
+  const _ProfileSummaryCard({
+    required this.baby,
+    required this.weightKg,
+    required this.onPhotoTap,
+  });
+
+  String _formatAgeCaps(DateTime birthDate) {
+    final totalDays = DateTime.now().difference(birthDate).inDays;
+    final months = totalDays ~/ 30;
+    final days = totalDays % 30;
+    return '$months MESES, $days DÍAS';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isMale = baby?.isMale ?? true;
+    final name = baby?.name ?? 'Bebé';
+    final ageLine = baby != null ? _formatAgeCaps(baby!.birthDate) : null;
+
+    return Material(
+      color: AppTheme.cardBackground,
+      elevation: AppTheme.cardElevation,
+      shadowColor: Colors.black12,
+      borderRadius: BorderRadius.circular(AppTheme.homeCardRadius),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
+        child: Column(
+          children: [
+            GestureDetector(
+              onTap: onPhotoTap,
+              child: baby?.photoUrl != null && baby!.photoUrl!.isNotEmpty
+                  ? _ProfileGradientAvatarRing(
+                      child: _LargeAvatarImage(
+                        photoUrl: baby!.photoUrl!,
+                        isMale: isMale,
+                      ),
+                    )
+                  : _AvatarPlaceholderWithOutsideBadge(isMale: isMale),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // Misma anchura que gap + icono: el nombre queda centrado en la tarjeta sin contar el símbolo.
+                const SizedBox(width: 38),
+                Text(
+                  name,
+                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                    color: Colors.black,
+                    height: 1.15,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Icon(
+                  isMale ? Icons.male : Icons.female,
+                  color: isMale
+                      ? AppTheme.genderMaleBabyBlue
+                      : AppTheme.palettePrimary,
+                  size: 28,
+                ),
+              ],
+            ),
+            if (ageLine != null) ...[
+              const SizedBox(height: 6),
+              Text(
+                ageLine,
+                style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                  color: AppTheme.textLight,
+                  letterSpacing: 1.2,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ],
+            const SizedBox(height: 16),
+            Center(
+              child: IntrinsicHeight(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          weightKg != null
+                              ? '${weightKg!.toStringAsFixed(2)} kg'
+                              : '—',
+                          style: Theme.of(context).textTheme.titleLarge
+                              ?.copyWith(
+                                fontWeight: FontWeight.w700,
+                                color: AppTheme.palettePrimary,
+                              ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'PESO',
+                          style: Theme.of(context).textTheme.labelSmall
+                              ?.copyWith(
+                                color: AppTheme.textLight,
+                                letterSpacing: 1.4,
+                                fontWeight: FontWeight.w600,
+                              ),
+                        ),
+                      ],
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 26),
+                      child: VerticalDivider(
+                        width: 1,
+                        thickness: 1,
+                        color: AppTheme.fieldBorder,
+                      ),
+                    ),
+                    Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          baby?.heightCm != null
+                              ? '${baby!.heightCm == baby!.heightCm!.roundToDouble() ? baby!.heightCm!.round() : baby!.heightCm} cm'
+                              : '—',
+                          style: Theme.of(context).textTheme.titleLarge
+                              ?.copyWith(
+                                fontWeight: FontWeight.w700,
+                                color: AppTheme.palettePrimary,
+                              ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'ALTURA',
+                          style: Theme.of(context).textTheme.labelSmall
+                              ?.copyWith(
+                                color: AppTheme.textLight,
+                                letterSpacing: 1.4,
+                                fontWeight: FontWeight.w600,
+                              ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ],
         ),
       ),
@@ -581,46 +659,825 @@ class _BabyProfileCard extends StatelessWidget {
   }
 }
 
-/// Estado de carga visual para la pantalla de inicio.
-class _HomeLoadingState extends StatelessWidget {
-  const _HomeLoadingState();
+class _LargeAvatarImage extends StatelessWidget {
+  final String photoUrl;
+  final bool isMale;
+
+  const _LargeAvatarImage({required this.photoUrl, required this.isMale});
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 40),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+    if (photoUrl.startsWith('data:')) {
+      try {
+        final base64 = photoUrl.split(',').last;
+        final bytes = base64Decode(base64);
+        return Image.memory(
+          bytes,
+          key: ValueKey(photoUrl),
+          fit: BoxFit.cover,
+          width: double.infinity,
+          height: double.infinity,
+          errorBuilder: (_, _, _) => Icon(
+            isMale ? Icons.face : Icons.face_3,
+            color: AppTheme.textLight,
+            size: 48,
+          ),
+        );
+      } catch (_) {
+        return Icon(
+          isMale ? Icons.face : Icons.face_3,
+          color: AppTheme.textLight,
+          size: 48,
+        );
+      }
+    }
+    return Image.network(
+      photoUrl,
+      key: ValueKey(photoUrl),
+      fit: BoxFit.cover,
+      width: double.infinity,
+      height: double.infinity,
+      errorBuilder: (_, _, _) => Icon(
+        isMale ? Icons.face : Icons.face_3,
+        color: AppTheme.textLight,
+        size: 48,
+      ),
+    );
+  }
+}
+
+// --- Resumen ---
+
+class _ResumenDeHoyBlock extends StatelessWidget {
+  final _WeightData weight;
+  final _FeedingData feeding;
+  final _DiapersData diapers;
+  final VoidCallback onTapWeight;
+  final VoidCallback onTapFeeding;
+  final VoidCallback onTapDiapers;
+
+  const _ResumenDeHoyBlock({
+    required this.weight,
+    required this.feeding,
+    required this.diapers,
+    required this.onTapWeight,
+    required this.onTapFeeding,
+    required this.onTapDiapers,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final dateLabel = DateFormat('d MMM', 'es').format(DateTime.now());
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
           children: [
-            Image.asset(
-              'assets/images/app_icon.png',
-              width: 80,
-              height: 80,
-              fit: BoxFit.contain,
-              errorBuilder: (_, _, _) => Icon(
-                Icons.child_care,
-                size: 80,
-                color: AppTheme.primaryPink,
+            Text(
+              'Resumen de Hoy',
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.w800,
+                color: Colors.black,
+                height: 1.2,
               ),
             ),
-            const SizedBox(height: 24),
-            Text(
-              'Cargando tus datos...',
-              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    color: AppTheme.textLight,
-                  ),
-            ),
-            const SizedBox(height: 20),
-            SizedBox(
-              width: 160,
-              child: LinearProgressIndicator(
-                backgroundColor: AppTheme.fieldBackground,
-                valueColor: const AlwaysStoppedAnimation<Color>(AppTheme.primaryPink),
-                borderRadius: BorderRadius.circular(4),
+            const SizedBox(width: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              decoration: BoxDecoration(
+                color: AppTheme.softPrimaryFill,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                dateLabel,
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: AppTheme.palettePrimary,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
           ],
+        ),
+        const SizedBox(height: 16),
+        _UltimaTomaCard(data: feeding, onTap: onTapFeeding),
+        const SizedBox(height: 14),
+        IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                child: _PesoResumenCard(data: weight, onTap: onTapWeight),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _PanalesResumenCard(data: diapers, onTap: onTapDiapers),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _UltimaTomaCard extends StatelessWidget {
+  final _FeedingData data;
+  final VoidCallback onTap;
+
+  const _UltimaTomaCard({required this.data, required this.onTap});
+
+  String _nextFeedingHint() {
+    if (data.lastFeedingAt == null) return '';
+    final next = data.lastFeedingAt!.add(const Duration(hours: 3));
+    final diff = next.difference(DateTime.now());
+    if (diff.inMinutes <= 0) return 'Próxima toma pronto';
+    return 'Próxima en ${formatMinutes(diff.inMinutes)}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hasLast =
+        data.lastFeedingMinutesAgo != null && data.lastFeedingDetail != null;
+    final subHint = _nextFeedingHint();
+
+    return Material(
+      color: AppTheme.palettePrimary,
+      elevation: AppTheme.cardElevation,
+      shadowColor: Colors.black26,
+      borderRadius: BorderRadius.circular(AppTheme.homeCardRadius),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppTheme.homeCardRadius),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 20, 16, 20),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                child: hasLast
+                    ? Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'ÚLTIMA TOMA',
+                            style: Theme.of(context).textTheme.labelSmall
+                                ?.copyWith(
+                                  color: Colors.white.withValues(alpha: 0.75),
+                                  letterSpacing: 1.2,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Hace ${formatMinutes(data.lastFeedingMinutesAgo!)}',
+                            style: Theme.of(context).textTheme.headlineSmall
+                                ?.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.white,
+                                  height: 1.15,
+                                ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            data.lastFeedingDetail!,
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(
+                                  color: Colors.white.withValues(alpha: 0.92),
+                                  fontWeight: FontWeight.w500,
+                                ),
+                          ),
+                          if (subHint.isNotEmpty) ...[
+                            const SizedBox(height: 6),
+                            Text(
+                              subHint,
+                              style: Theme.of(context).textTheme.labelSmall
+                                  ?.copyWith(
+                                    color: Colors.white.withValues(alpha: 0.65),
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                            ),
+                          ],
+                        ],
+                      )
+                    : Text(
+                        'Sin tomas registradas aún. Toca para anotar la primera.',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Colors.white.withValues(alpha: 0.9),
+                        ),
+                      ),
+              ),
+              const SizedBox(width: 8),
+              Icon(
+                Icons.schedule_rounded,
+                color: Colors.white.withValues(alpha: 0.9),
+                size: 44,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PesoResumenCard extends StatelessWidget {
+  final _WeightData data;
+  final VoidCallback onTap;
+
+  const _PesoResumenCard({required this.data, required this.onTap});
+
+  static String? _formatLastRecorded(DateTime? dt) {
+    if (dt == null) return null;
+    return DateFormat('d MMM', 'es').format(dt);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final trend = data.weeklyDeltaGrams;
+    final lastLabel = _formatLastRecorded(data.lastRecordedAt);
+    return Material(
+      color: AppTheme.cardBackground,
+      elevation: AppTheme.cardElevation,
+      shadowColor: Colors.black12,
+      borderRadius: BorderRadius.circular(AppTheme.homeCardRadius),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppTheme.homeCardRadius),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(AppTheme.homeCardRadius),
+          child: Stack(
+            children: [
+              Positioned(
+                right: -8,
+                bottom: -12,
+                child: Icon(
+                  Icons.monitor_weight_rounded,
+                  size: 86,
+                  color: AppTheme.navWeightSelectedFg.withValues(alpha: 0.12),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'PESO',
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: AppTheme.textDark,
+                        letterSpacing: 1.2,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      data.currentKg != null
+                          ? '${data.currentKg!.toStringAsFixed(2)} kg'
+                          : '—',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.textDark,
+                      ),
+                    ),
+                    if (trend != null) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        '${trend >= 0 ? '+' : ''}$trend g esta semana',
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: trend >= 0
+                              ? AppTheme.trendPositiveGreen
+                              : AppTheme.trendNegativeRed,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                    if (lastLabel != null) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        'Último: $lastLabel',
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: AppTheme.textLight,
+                          fontWeight: FontWeight.w600,
+                          height: 1.3,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PanalesResumenCard extends StatelessWidget {
+  final _DiapersData data;
+  final VoidCallback onTap;
+
+  const _PanalesResumenCard({required this.data, required this.onTap});
+
+  static String? _formatLastRecorded(DateTime? dt) {
+    if (dt == null) return null;
+    return DateFormat('d MMM · HH:mm', 'es').format(dt);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final lastLabel = _formatLastRecorded(data.lastRecordedAt);
+    return Material(
+      color: AppTheme.cardBackground,
+      elevation: AppTheme.cardElevation,
+      shadowColor: Colors.black12,
+      borderRadius: BorderRadius.circular(AppTheme.homeCardRadius),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppTheme.homeCardRadius),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(AppTheme.homeCardRadius),
+          child: Stack(
+            children: [
+              Positioned(
+                right: -6,
+                bottom: -10,
+                child: Icon(
+                  MdiIcons.humanBabyChangingTable,
+                  size: 80,
+                  color: AppTheme.navDiapersSelectedFg.withValues(alpha: 0.12),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'PAÑALES',
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: AppTheme.textDark,
+                        letterSpacing: 1.2,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      data.totalToday == 1
+                          ? '1 cambio'
+                          : '${data.totalToday} cambios',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.textDark,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      '${data.wetCount} mojados · ${data.dirtyCount} sucios',
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: AppTheme.textLight,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    if (lastLabel != null) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        'Último: $lastLabel',
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: AppTheme.textLight,
+                          fontWeight: FontWeight.w600,
+                          height: 1.3,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ConsejoDelDiaCard extends StatelessWidget {
+  final String? text;
+
+  const _ConsejoDelDiaCard({this.text});
+
+  (String title, String body) _splitTip(String raw) {
+    final dot = raw.indexOf('. ');
+    if (dot >= 12 && dot < raw.length - 8) {
+      return (raw.substring(0, dot + 1).trim(), raw.substring(dot + 2).trim());
+    }
+    final comma = raw.indexOf(', ');
+    if (comma >= 10 && comma < 48 && comma < raw.length - 10) {
+      return (raw.substring(0, comma).trim(), raw.substring(comma + 2).trim());
+    }
+    return ('Un detalle sobre tu bebé', raw);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final raw =
+        text ??
+        'Los bebés pueden reconocer la voz de su madre desde el útero. Hablarles con calma refuerza ese vínculo.';
+    final parts = _splitTip(raw);
+
+    final cardColor = Color.lerp(AppTheme.paletteTertiary, Colors.white, 0.62)!;
+    final iconColor = Color.lerp(
+      AppTheme.paletteTertiary,
+      Colors.white,
+      0.2,
+    )!.withValues(alpha: 0.55);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(20, 20, 16, 20),
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(AppTheme.homeCardRadius),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'CONSEJO DEL DÍA',
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: AppTheme.tipText.withValues(alpha: 0.78),
+                    letterSpacing: 1.3,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  parts.$1,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: AppTheme.tipText,
+                  ),
+                ),
+                if (parts.$2.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    parts.$2,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: AppTheme.tipText,
+                      height: 1.45,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          Icon(Icons.lightbulb_outline_rounded, size: 72, color: iconColor),
+        ],
+      ),
+    );
+  }
+}
+
+/// Franja luminosa animada encima de cada ficha (skeleton).
+class _ShimmerWrap extends StatelessWidget {
+  final Animation<double> animation;
+  final BorderRadius borderRadius;
+  final Widget child;
+
+  const _ShimmerWrap({
+    required this.animation,
+    required this.borderRadius,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: borderRadius,
+      child: Stack(
+        clipBehavior: Clip.hardEdge,
+        children: [
+          child,
+          Positioned.fill(
+            child: IgnorePointer(
+              child: AnimatedBuilder(
+                animation: animation,
+                builder: (context, _) {
+                  return LayoutBuilder(
+                    builder: (context, c) {
+                      final w = c.maxWidth;
+                      if (w <= 0) return const SizedBox.shrink();
+                      final dx = (animation.value * 2 - 1) * w * 0.95;
+                      return Transform.translate(
+                        offset: Offset(dx, 0),
+                        child: Container(
+                          width: w * 0.42,
+                          height: double.infinity,
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.centerLeft,
+                              end: Alignment.centerRight,
+                              colors: [
+                                Colors.white.withValues(alpha: 0),
+                                Colors.white.withValues(alpha: 0.5),
+                                Colors.white.withValues(alpha: 0),
+                              ],
+                              stops: const [0.32, 0.5, 0.68],
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  );
+                },
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Esqueleto del home: mismas fichas que con datos, con shimmer individual.
+class _HomeCardsSkeleton extends StatefulWidget {
+  const _HomeCardsSkeleton();
+
+  @override
+  State<_HomeCardsSkeleton> createState() => _HomeCardsSkeletonState();
+}
+
+class _HomeCardsSkeletonState extends State<_HomeCardsSkeleton>
+    with SingleTickerProviderStateMixin {
+  static const _bar = Color(0xFFE4E6EA);
+
+  late AnimationController _shimmer;
+
+  @override
+  void initState() {
+    super.initState();
+    _shimmer = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1700),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _shimmer.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final rr = BorderRadius.circular(AppTheme.homeCardRadius);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _profileCard(rr),
+        const SizedBox(height: 24),
+        _resumenBlock(rr),
+        const SizedBox(height: 20),
+        _consejoCard(rr),
+      ],
+    );
+  }
+
+  Widget _profileCard(BorderRadius rr) {
+    return Material(
+      color: AppTheme.cardBackground,
+      elevation: AppTheme.cardElevation,
+      shadowColor: Colors.black12,
+      borderRadius: rr,
+      child: _ShimmerWrap(
+        animation: _shimmer,
+        borderRadius: rr,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
+          child: Column(
+            children: [
+              Container(
+                width: _ProfileGradientAvatarRing.outerDiameter,
+                height: _ProfileGradientAvatarRing.outerDiameter,
+                decoration: const BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: _bar,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Container(
+                height: 28,
+                width: 168,
+                decoration: BoxDecoration(
+                  color: _bar,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Container(
+                height: 16,
+                width: 132,
+                decoration: BoxDecoration(
+                  color: _bar,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Center(
+                child: IntrinsicHeight(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _statColumn(),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 26),
+                        child: VerticalDivider(
+                          width: 1,
+                          thickness: 1,
+                          color: AppTheme.fieldBorder,
+                        ),
+                      ),
+                      _statColumn(),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _statColumn() {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Container(
+          height: 24,
+          width: 76,
+          decoration: BoxDecoration(
+            color: _bar,
+            borderRadius: BorderRadius.circular(6),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          height: 12,
+          width: 44,
+          decoration: BoxDecoration(
+            color: _bar,
+            borderRadius: BorderRadius.circular(4),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _resumenBlock(BorderRadius rr) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Container(
+                height: 26,
+                decoration: BoxDecoration(
+                  color: _bar,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Container(
+              height: 28,
+              width: 92,
+              decoration: BoxDecoration(
+                color: AppTheme.softPrimaryFill,
+                borderRadius: BorderRadius.circular(20),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        Material(
+          color: Color.lerp(AppTheme.palettePrimary, Colors.white, 0.62)!,
+          elevation: AppTheme.cardElevation,
+          shadowColor: Colors.black26,
+          borderRadius: rr,
+          child: _ShimmerWrap(
+            animation: _shimmer,
+            borderRadius: rr,
+            child: const SizedBox(
+              height: 92,
+              width: double.infinity,
+            ),
+          ),
+        ),
+        const SizedBox(height: 14),
+        IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(child: _metricSkeleton(rr)),
+              const SizedBox(width: 12),
+              Expanded(child: _metricSkeleton(rr)),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _metricSkeleton(BorderRadius rr) {
+    return Material(
+      color: AppTheme.cardBackground,
+      elevation: AppTheme.cardElevation,
+      shadowColor: Colors.black12,
+      borderRadius: rr,
+      child: _ShimmerWrap(
+        animation: _shimmer,
+        borderRadius: rr,
+        child: const SizedBox(
+          height: 118,
+          width: double.infinity,
+        ),
+      ),
+    );
+  }
+
+  Widget _consejoCard(BorderRadius rr) {
+    final cardColor = Color.lerp(AppTheme.paletteTertiary, Colors.white, 0.62)!;
+    return Material(
+      color: cardColor,
+      elevation: 0,
+      borderRadius: rr,
+      child: _ShimmerWrap(
+        animation: _shimmer,
+        borderRadius: rr,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 20, 16, 20),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      height: 14,
+                      width: 140,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.55),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Container(
+                      height: 18,
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.6),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      height: 18,
+                      width: 200,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.45),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      height: 14,
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.35),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                width: 72,
+                height: 72,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.45),
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -629,28 +1486,21 @@ class _HomeLoadingState extends StatelessWidget {
 
 class _WeightData {
   final double? currentKg;
-  final double? changeKg;
-  final DateTime? weighedDate;
-  final double? diffFromP50Kg;
+  final int? weeklyDeltaGrams;
+  final DateTime? lastRecordedAt;
 
-  _WeightData({this.currentKg, this.changeKg, this.weighedDate, this.diffFromP50Kg});
+  _WeightData({this.currentKg, this.weeklyDeltaGrams, this.lastRecordedAt});
 }
 
 class _FeedingData {
-  final int breastMinutes;
-  final int breastCount;
-  final int bottleMl;
-  final int bottleCount;
   final int? lastFeedingMinutesAgo;
-  final String? lastFeedingType;
+  final String? lastFeedingDetail;
+  final DateTime? lastFeedingAt;
 
   _FeedingData({
-    required this.breastMinutes,
-    required this.breastCount,
-    required this.bottleMl,
-    required this.bottleCount,
     this.lastFeedingMinutesAgo,
-    this.lastFeedingType,
+    this.lastFeedingDetail,
+    this.lastFeedingAt,
   });
 }
 
@@ -658,528 +1508,12 @@ class _DiapersData {
   final int wetCount;
   final int dirtyCount;
   final int totalToday;
-  final double avg7Days;
-  final int? lastChangeMinutesAgo;
-  final String? lastChangeType;
+  final DateTime? lastRecordedAt;
 
   _DiapersData({
     required this.wetCount,
     required this.dirtyCount,
     required this.totalToday,
-    required this.avg7Days,
-    this.lastChangeMinutesAgo,
-    this.lastChangeType,
+    this.lastRecordedAt,
   });
-}
-
-class _WeightCard extends StatelessWidget {
-  final int index;
-  final _WeightData data;
-  final VoidCallback onTap;
-
-  const _WeightCard({super.key, required this.index, required this.data, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return _HomeCard(
-      key: key,
-      cardKey: key,
-      index: index,
-      icon: Icons.monitor_weight,
-      iconColor: AppTheme.primaryGreen,
-      title: 'Evolución Peso',
-      onTap: onTap,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: AppTheme.primaryGreen.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Peso Actual',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: AppTheme.textLight,
-                            ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        data.currentKg != null
-                            ? '${data.currentKg!.toStringAsFixed(3)} kg'
-                            : 'Sin datos',
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                              fontWeight: FontWeight.bold,
-                              color: AppTheme.primaryGreen,
-                            ),
-                      ),
-                    ],
-                  ),
-                ),
-                if (data.changeKg != null) ...[
-                  Icon(
-                    data.changeKg! >= 0 ? Icons.trending_up : Icons.trending_down,
-                    size: 20,
-                    color: AppTheme.primaryGreen,
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    '${data.changeKg! >= 0 ? '+' : ''}${data.changeKg!.toStringAsFixed(3)} kg',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: AppTheme.primaryGreen,
-                        ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-          if (data.diffFromP50Kg != null) ...[
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
-                color: data.diffFromP50Kg! >= 0
-                    ? AppTheme.primaryGreen.withValues(alpha: 0.15)
-                    : Colors.orange.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    data.diffFromP50Kg! >= 0 ? Icons.trending_up : Icons.trending_down,
-                    size: 18,
-                    color: data.diffFromP50Kg! >= 0 ? AppTheme.primaryGreen : Colors.orange,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    data.diffFromP50Kg! >= 0
-                        ? '${data.diffFromP50Kg!.toStringAsFixed(2)} kg por encima del percentil'
-                        : '${(-data.diffFromP50Kg!).toStringAsFixed(2)} kg por debajo del percentil',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
-                          color: data.diffFromP50Kg! >= 0 ? AppTheme.primaryGreen : Colors.orange,
-                        ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF5F5F5),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Row(
-              children: [
-                Icon(Icons.access_time, size: 18, color: AppTheme.textLight),
-                const SizedBox(width: 8),
-                Text(
-                  data.weighedDate != null
-                      ? 'Pesado el: ${DateFormat('d \'de\' MMMM', 'es').format(data.weighedDate!)}'
-                      : 'Sin datos',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: AppTheme.textLight,
-                      ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _FeedingCard extends StatelessWidget {
-  final int index;
-  final _FeedingData data;
-  final VoidCallback onTap;
-
-  const _FeedingCard({super.key, required this.index, required this.data, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    final hasData = data.breastCount > 0 || data.bottleCount > 0;
-    return _HomeCard(
-      key: key,
-      cardKey: key,
-      index: index,
-      icon: MdiIcons.foodApple,
-      iconColor: AppTheme.primaryPink,
-      title: 'Alimentación Hoy',
-      onTap: onTap,
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: AppTheme.primaryPink.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Pecho (${data.breastCount} toma${data.breastCount != 1 ? 's' : ''})',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: AppTheme.textLight,
-                            ),
-                      ),
-                      Text(
-                        formatMinutes(data.breastMinutes),
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
-                              color: AppTheme.primaryPink,
-                            ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: AppTheme.primaryBlue.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Biberón (${data.bottleCount} toma${data.bottleCount != 1 ? 's' : ''})',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: AppTheme.textLight,
-                            ),
-                      ),
-                      Text(
-                        '${data.bottleMl} ml',
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
-                              color: AppTheme.primaryBlue,
-                            ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-          if (data.lastFeedingMinutesAgo != null && data.lastFeedingType != null) ...[
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF5F5F5),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.access_time, size: 18, color: AppTheme.textLight),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Última toma: ',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: AppTheme.textLight,
-                        ),
-                  ),
-                  Text(
-                    'Hace ${formatMinutes(data.lastFeedingMinutesAgo!)}',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: AppTheme.textDark,
-                        ),
-                  ),
-                  Text(
-                    ' (${data.lastFeedingType})',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: AppTheme.textLight,
-                        ),
-                  ),
-                ],
-              ),
-            ),
-          ] else if (!hasData) ...[
-            const SizedBox(height: 12),
-            Text(
-              'Sin registros hoy',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: AppTheme.textLight,
-                  ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _DiapersCard extends StatelessWidget {
-  final int index;
-  final _DiapersData data;
-  final VoidCallback onTap;
-
-  const _DiapersCard({super.key, required this.index, required this.data, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return _HomeCard(
-      key: key,
-      cardKey: key,
-      index: index,
-      icon: MdiIcons.humanBabyChangingTable,
-      iconColor: AppTheme.primaryBlue,
-      title: 'Pañales Hoy',
-      onTap: onTap,
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: AppTheme.primaryBlue.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Mojados',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: AppTheme.textLight,
-                            ),
-                      ),
-                      Text(
-                        '${data.wetCount}',
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
-                              color: AppTheme.primaryBlue,
-                            ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: AppTheme.primaryOrange.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Sucios',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: AppTheme.textLight,
-                            ),
-                      ),
-                      Text(
-                        '${data.dirtyCount}',
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
-                              color: AppTheme.primaryOrange,
-                            ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF5F5F5),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Total hoy',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: AppTheme.textLight,
-                            ),
-                      ),
-                      Text(
-                        '${data.totalToday}',
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
-                              color: AppTheme.textDark,
-                            ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF5F5F5),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Media 7 días',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: AppTheme.textLight,
-                            ),
-                      ),
-                      Text(
-                        data.avg7Days.toStringAsFixed(1),
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
-                              color: AppTheme.textDark,
-                            ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-          if (data.lastChangeMinutesAgo != null && data.lastChangeType != null) ...[
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF5F5F5),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.access_time, size: 18, color: AppTheme.textLight),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Último cambio: ',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: AppTheme.textLight,
-                        ),
-                  ),
-                  Text(
-                    'Hace ${formatMinutes(data.lastChangeMinutesAgo!)}',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: AppTheme.textDark,
-                        ),
-                  ),
-                  Text(
-                    ' (${data.lastChangeType})',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: AppTheme.textLight,
-                        ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _HomeCard extends StatelessWidget {
-  final Key? cardKey;
-  final int index;
-  final IconData icon;
-  final Color iconColor;
-  final String title;
-  final Widget child;
-  final VoidCallback onTap;
-
-  const _HomeCard({
-    super.key,
-    required this.cardKey,
-    required this.index,
-    required this.icon,
-    required this.iconColor,
-    required this.title,
-    required this.child,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      key: cardKey,
-      margin: const EdgeInsets.only(bottom: 16),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
-        child: Padding(
-          padding: const EdgeInsets.only(left: 20, top: 20, bottom: 20, right: 8),
-          child: IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(icon, color: iconColor, size: 24),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              title,
-                              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                    color: AppTheme.textDark,
-                                  ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      child,
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 4),
-                Center(
-                  child: ReorderableDragStartListener(
-                    index: index,
-                    child: FaIcon(FontAwesomeIcons.gripVertical, color: AppTheme.textLight, size: 24),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 }

@@ -73,13 +73,20 @@ class StorageServiceWeb implements StorageService {
       'birthDate': profile.birthDate.toIso8601String(),
       'createdAt': profile.createdAt?.toIso8601String(),
       'photoUrl': profile.photoUrl,
+      'heightCm': profile.heightCm,
     }));
   }
 
   @override
   Stream<List<WeightRecord>> watchWeightRecords() {
-    _emitWeights();
-    return _weightController.stream;
+    return Stream.multi((listener) {
+      listener.add(_loadWeightRecords());
+      final sub = _weightController.stream.listen(
+        listener.add,
+        onError: listener.addError,
+      );
+      listener.onCancel = () => sub.cancel();
+    });
   }
 
   @override
@@ -116,8 +123,14 @@ class StorageServiceWeb implements StorageService {
 
   @override
   Stream<List<DiaperRecord>> watchDiaperRecords() {
-    _emitDiapers();
-    return _diaperController.stream;
+    return Stream.multi((listener) {
+      listener.add(_loadDiaperRecords());
+      final sub = _diaperController.stream.listen(
+        listener.add,
+        onError: listener.addError,
+      );
+      listener.onCancel = () => sub.cancel();
+    });
   }
 
   @override
@@ -171,8 +184,14 @@ class StorageServiceWeb implements StorageService {
 
   @override
   Stream<List<FeedingRecord>> watchFeedingRecords() {
-    _emitFeedings();
-    return _feedingController.stream;
+    return Stream.multi((listener) {
+      listener.add(_loadFeedingRecords());
+      final sub = _feedingController.stream.listen(
+        listener.add,
+        onError: listener.addError,
+      );
+      listener.onCancel = () => sub.cancel();
+    });
   }
 
   @override
@@ -267,6 +286,7 @@ class StorageServiceWeb implements StorageService {
       birthDate: DateTime.parse(m['birthDate'] as String),
       createdAt: m['createdAt'] != null ? DateTime.parse(m['createdAt'] as String) : null,
       photoUrl: m['photoUrl'] as String?,
+      heightCm: (m['heightCm'] as num?)?.toDouble(),
     );
   }
 
@@ -383,18 +403,6 @@ class StorageServiceWeb implements StorageService {
       'onboardingCompleted': s.onboardingCompleted,
       'homeCardOrder': s.homeCardOrder,
     }));
-  }
-
-  void _emitWeights() {
-    if (_prefs != null) _weightController.add(_loadWeightRecords());
-  }
-
-  void _emitDiapers() {
-    if (_prefs != null) _diaperController.add(_loadDiaperRecords());
-  }
-
-  void _emitFeedings() {
-    if (_prefs != null) _feedingController.add(_loadFeedingRecords());
   }
 
   int _nextId() {

@@ -7,9 +7,11 @@ import 'package:intl/intl.dart';
 import 'package:material_design_icons_flutter/material_design_icons_flutter.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/main_app_title_bar.dart';
 import '../../../core/utils/format_duration.dart';
 import '../../../core/theme/edit_dialog_theme.dart';
 import '../../../core/db/isar_service.dart';
+import '../../../core/providers/record_stream_providers.dart';
 import '../../../core/widgets/edit_dialog_fields.dart';
 import '../../../core/widgets/edit_bottom_sheet.dart';
 import '../../../core/models/feeding_record.dart';
@@ -19,9 +21,15 @@ import 'bottle_view.dart';
 
 class FeedingView extends ConsumerStatefulWidget {
   final VoidCallback? onTitleTap;
+  final VoidCallback onSettingsTap;
   final ScrollController? scrollController;
 
-  const FeedingView({super.key, this.onTitleTap, this.scrollController});
+  const FeedingView({
+    super.key,
+    this.onTitleTap,
+    required this.onSettingsTap,
+    this.scrollController,
+  });
 
   @override
   ConsumerState<FeedingView> createState() => _FeedingViewState();
@@ -73,11 +81,15 @@ class _FeedingViewState extends ConsumerState<FeedingView> {
     _timer?.cancel();
     if (mounted && timer != null) {
       setState(() => _activeTimer = null);
-      await IsarService.addFeedingRecord(FeedingRecord(
-        type: timer.side == LactationSide.left ? FeedingType.leftBreast : FeedingType.rightBreast,
-        dateTime: timer.startedAt,
-        durationSeconds: timer.elapsed.inSeconds,
-      ));
+      await IsarService.addFeedingRecord(
+        FeedingRecord(
+          type: timer.side == LactationSide.left
+              ? FeedingType.leftBreast
+              : FeedingType.rightBreast,
+          dateTime: timer.startedAt,
+          durationSeconds: timer.elapsed.inSeconds,
+        ),
+      );
     }
   }
 
@@ -88,172 +100,213 @@ class _FeedingViewState extends ConsumerState<FeedingView> {
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppTheme.background,
-      appBar: AppBar(
-        title: InkWell(
-          onTap: widget.onTitleTap,
-          borderRadius: BorderRadius.circular(8),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Image.asset(AppTheme.titleIconAsset, width: 22, height: 22, fit: BoxFit.contain),
-                const SizedBox(width: 6),
-                Flexible(child: Text('MiBebé Diario', overflow: TextOverflow.ellipsis)),
-              ],
-            ),
-          ),
+  Widget _feedingHistoryColumn(BuildContext context, List<FeedingRecord> records) {
+    final sorted = List<FeedingRecord>.from(records)
+      ..sort((a, b) => b.dateTime.compareTo(a.dateTime));
+    final grouped = <String, List<FeedingRecord>>{};
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+    for (final r in sorted) {
+      final d = r.dateTime;
+      final day = DateTime(d.year, d.month, d.day);
+      String key;
+      if (day == today) {
+        key = 'Hoy';
+      } else if (day == yesterday) {
+        key = 'Ayer';
+      } else {
+        key = DateFormat('d/M').format(d);
+      }
+      grouped.putIfAbsent(key, () => []).add(r);
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Historial',
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
         ),
-      ),
-      body: SingleChildScrollView(
-        controller: widget.scrollController,
-        padding: const EdgeInsets.all(20),
-        child: Card(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+        const SizedBox(height: 16),
+        ...grouped.entries.expand(
+          (e) => [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(
-                  children: [
-                    Icon(MdiIcons.foodApple, color: AppTheme.primaryPink),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Alimentación',
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                            fontWeight: FontWeight.bold,
-                            color: AppTheme.textDark,
-                          ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 24),
-                if (_activeTimer != null) ...[
-                  _ActiveTimerBanner(
-                    timer: _activeTimer!,
-                    onStop: _stopBreast,
-                  ),
-                  const SizedBox(height: 24),
-                ],
                 Text(
-                  'Tipo de toma',
+                  e.key,
                   style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w600,
                         color: AppTheme.textLight,
                       ),
                 ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _BreastButton(
-                        label: 'Pecho Izquierdo',
-                        icon: FontAwesomeIcons.personBreastfeeding,
-                        mirrored: false,
-                        onTap: () async {
-                          if (_activeTimer?.side == LactationSide.left) {
-                            await _stopBreast();
-                          } else {
-                            if (_activeTimer != null) await _stopBreast();
-                            await _startBreast(LactationSide.left);
-                          }
-                        },
-                        isActive: _activeTimer?.side == LactationSide.left,
+                Text(
+                  '${e.value.length} toma${e.value.length != 1 ? 's' : ''}',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: AppTheme.textLight,
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _BreastButton(
-                        label: 'Pecho Derecho',
-                        icon: FontAwesomeIcons.personBreastfeeding,
-                        mirrored: true,
-                        onTap: () async {
-                          if (_activeTimer?.side == LactationSide.right) {
-                            await _stopBreast();
-                          } else {
-                            if (_activeTimer != null) await _stopBreast();
-                            await _startBreast(LactationSide.right);
-                          }
-                        },
-                        isActive: _activeTimer?.side == LactationSide.right,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _BottleButton(onTap: _openBottle),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 32),
-                StreamBuilder<List<FeedingRecord>>(
-                  stream: IsarService.watchFeedingRecords(),
-                  builder: (context, snapshot) {
-                    if (!snapshot.hasData) {
-                      return const Center(child: CircularProgressIndicator());
-                    }
-                    final records = snapshot.data!;
-                    final sorted = List<FeedingRecord>.from(records)
-                      ..sort((a, b) => b.dateTime.compareTo(a.dateTime));
-                    final grouped = <String, List<FeedingRecord>>{};
-                    final now = DateTime.now();
-                    final today = DateTime(now.year, now.month, now.day);
-                    final yesterday = today.subtract(const Duration(days: 1));
-                    for (final r in sorted) {
-                      final d = r.dateTime;
-                      final day = DateTime(d.year, d.month, d.day);
-                      String key;
-                      if (day == today) {
-                        key = 'Hoy';
-                      } else if (day == yesterday) {
-                        key = 'Ayer';
-                      } else {
-                        key = DateFormat('d/M').format(d);
-                      }
-                      grouped.putIfAbsent(key, () => []).add(r);
-                    }
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Historial',
-                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.bold,
-                              ),
-                        ),
-                        const SizedBox(height: 16),
-                        ...grouped.entries.expand((e) => [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                e.key,
-                                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                                      fontWeight: FontWeight.w600,
-                                      color: AppTheme.textLight,
-                                    ),
-                              ),
-                              Text(
-                                '${e.value.length} toma${e.value.length != 1 ? 's' : ''}',
-                                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                      color: AppTheme.textLight,
-                                    ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          ...e.value.map((r) => _FeedingRecordTile(record: r)),
-                          const SizedBox(height: 16),
-                        ]),
-                      ],
-                    );
-                  },
                 ),
               ],
             ),
-          ),
+            const SizedBox(height: 8),
+            ...e.value.map((r) => _FeedingRecordTile(record: r)),
+            const SizedBox(height: 16),
+          ],
+        ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final feedingRecordsAsync = ref.watch(feedingRecordsStreamProvider);
+    return Scaffold(
+      backgroundColor: AppTheme.background,
+      body: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            MainAppTitleBar(
+              onTitleTap: widget.onTitleTap,
+              onSettingsTap: widget.onSettingsTap,
+            ),
+            Expanded(
+              child: SingleChildScrollView(
+                controller: widget.scrollController,
+                padding: const EdgeInsets.fromLTRB(
+                  AppTheme.screenEdgePadding,
+                  AppTheme.contentPaddingTopAfterTitleBar,
+                  AppTheme.screenEdgePadding,
+                  20,
+                ),
+                child: Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Row(
+                          children: [
+                            FaIcon(
+                              FontAwesomeIcons.utensils,
+                              color: AppTheme.pageTitleIconFeeding,
+                              size: 20,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Alimentación',
+                              style: Theme.of(context).textTheme.titleLarge
+                                  ?.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                    color: AppTheme.textDark,
+                                  ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 24),
+                        if (_activeTimer != null) ...[
+                          _ActiveTimerBanner(
+                            timer: _activeTimer!,
+                            onStop: _stopBreast,
+                          ),
+                          const SizedBox(height: 24),
+                        ],
+                        Text(
+                          'Tipo de toma',
+                          style: Theme.of(context).textTheme.titleSmall
+                              ?.copyWith(color: AppTheme.textLight),
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _TomaTypeButton(
+                                label: 'Izquierdo',
+                                isActive:
+                                    _activeTimer?.side == LactationSide.left,
+                                onTap: () async {
+                                  if (_activeTimer?.side ==
+                                      LactationSide.left) {
+                                    await _stopBreast();
+                                  } else {
+                                    if (_activeTimer != null)
+                                      await _stopBreast();
+                                    await _startBreast(LactationSide.left);
+                                  }
+                                },
+                                iconBuilder: (c) => FaIcon(
+                                  FontAwesomeIcons.personBreastfeeding,
+                                  size: 28,
+                                  color: c,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: _TomaTypeButton(
+                                label: 'Derecho',
+                                isActive:
+                                    _activeTimer?.side == LactationSide.right,
+                                onTap: () async {
+                                  if (_activeTimer?.side ==
+                                      LactationSide.right) {
+                                    await _stopBreast();
+                                  } else {
+                                    if (_activeTimer != null)
+                                      await _stopBreast();
+                                    await _startBreast(LactationSide.right);
+                                  }
+                                },
+                                iconBuilder: (c) => Transform(
+                                  alignment: Alignment.center,
+                                  transform: Matrix4.diagonal3Values(-1, 1, 1),
+                                  child: FaIcon(
+                                    FontAwesomeIcons.personBreastfeeding,
+                                    size: 28,
+                                    color: c,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: _TomaTypeButton(
+                                label: 'Biberón',
+                                isActive: false,
+                                onTap: _openBottle,
+                                iconBuilder: (c) => Icon(
+                                  MdiIcons.babyBottle,
+                                  size: 28,
+                                  color: c,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 32),
+                        feedingRecordsAsync.when(
+                          skipLoadingOnReload: true,
+                          data: (records) =>
+                              _feedingHistoryColumn(context, records),
+                          loading: () => const Center(
+                            child: CircularProgressIndicator(),
+                          ),
+                          error: (e, _) => Text(
+                            'Error al cargar: $e',
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.error,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -272,17 +325,25 @@ class _ActiveTimerBanner extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppTheme.primaryPink.withValues(alpha: 0.1),
+        color: AppTheme.softPrimaryFill,
         borderRadius: BorderRadius.circular(AppTheme.cardRadius),
       ),
       child: Row(
         children: [
           timer.side == LactationSide.left
-              ? const FaIcon(FontAwesomeIcons.personBreastfeeding, color: AppTheme.breastLeft, size: 32)
+              ? const FaIcon(
+                  FontAwesomeIcons.personBreastfeeding,
+                  color: AppTheme.palettePrimary,
+                  size: 32,
+                )
               : Transform(
                   alignment: Alignment.center,
                   transform: Matrix4.diagonal3Values(-1, 1, 1),
-                  child: const FaIcon(FontAwesomeIcons.personBreastfeeding, color: AppTheme.breastRight, size: 32),
+                  child: const FaIcon(
+                    FontAwesomeIcons.personBreastfeeding,
+                    color: AppTheme.palettePrimary,
+                    size: 32,
+                  ),
                 ),
           const SizedBox(width: 16),
           Expanded(
@@ -290,22 +351,24 @@ class _ActiveTimerBanner extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Cronómetro activo: ${timer.side == LactationSide.left ? "Pecho Izquierdo" : "Pecho Derecho"}',
+                  'Cronómetro activo: ${timer.side == LactationSide.left ? "Izquierdo" : "Derecho"}',
                   style: const TextStyle(fontWeight: FontWeight.w600),
                 ),
                 Text(
                   formatDurationSeconds(totalSeconds),
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: AppTheme.primaryPink,
-                        fontWeight: FontWeight.bold,
-                      ),
+                    color: AppTheme.palettePrimary,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ],
             ),
           ),
           ElevatedButton(
             onPressed: onStop,
-            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryPink),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.palettePrimary,
+            ),
             child: const Text('Parar'),
           ),
         ],
@@ -314,110 +377,61 @@ class _ActiveTimerBanner extends StatelessWidget {
   }
 }
 
-class _BreastButton extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final bool mirrored;
-  final VoidCallback onTap;
-  final bool isActive;
+typedef _TomaIconBuilder = Widget Function(Color iconColor);
 
-  const _BreastButton({
+/// Izquierdo / Derecho / Biberón: misma tarjeta; el cronómetro marca `isActive` en el pecho.
+class _TomaTypeButton extends StatelessWidget {
+  final String label;
+  final bool isActive;
+  final VoidCallback onTap;
+  final _TomaIconBuilder iconBuilder;
+
+  const _TomaTypeButton({
     required this.label,
-    required this.icon,
-    this.mirrored = false,
+    required this.isActive,
     required this.onTap,
-    this.isActive = false,
+    required this.iconBuilder,
   });
 
   @override
   Widget build(BuildContext context) {
-    final color = isActive ? AppTheme.primaryPink : AppTheme.textLight;
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(AppTheme.cardRadius),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(vertical: 16),
-        decoration: BoxDecoration(
-          color: isActive ? const Color(0xFFF5F5F5) : Colors.white,
-          borderRadius: BorderRadius.circular(AppTheme.cardRadius),
-          border: Border.all(
-            color: isActive ? AppTheme.primaryPink.withValues(alpha: 0.5) : Colors.transparent,
-            width: 2,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
-              blurRadius: 4,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Column(
-          children: [
-            mirrored
-                ? Transform(
-                    alignment: Alignment.center,
-                    transform: Matrix4.diagonal3Values(-1, 1, 1),
-                    child: FaIcon(icon, size: 28, color: color),
-                  )
-                : FaIcon(icon, size: 28, color: color),
-            const SizedBox(height: 8),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
-                color: isActive ? AppTheme.textDark : AppTheme.textLight,
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
+    final iconColor = isActive ? AppTheme.palettePrimary : AppTheme.textLight;
+    final surface = isActive ? const Color(0xFFF5F5F5) : Colors.white;
+    final borderColor = isActive
+        ? AppTheme.palettePrimary.withValues(alpha: 0.55)
+        : AppTheme.fieldBorder;
+    final borderWidth = isActive ? 2.0 : 1.5;
+
+    return Material(
+      color: surface,
+      elevation: isActive ? 2 : 1.5,
+      shadowColor: Colors.black.withValues(alpha: 0.18),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
+        side: BorderSide(color: borderColor, width: borderWidth),
       ),
-    );
-  }
-}
-
-class _BottleButton extends StatelessWidget {
-  final VoidCallback onTap;
-
-  const _BottleButton({required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(AppTheme.cardRadius),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(vertical: 16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(AppTheme.cardRadius),
-          border: Border.all(color: Colors.transparent, width: 2),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
-              blurRadius: 4,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Column(
-          children: [
-            Icon(MdiIcons.babyBottle, size: 28, color: AppTheme.primaryBlue),
-            const SizedBox(height: 8),
-            Text(
-              'Biberón',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.normal,
-                color: AppTheme.textLight,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
+        splashColor: AppTheme.palettePrimary.withValues(alpha: 0.12),
+        highlightColor: AppTheme.palettePrimary.withValues(alpha: 0.06),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 6),
+          child: Column(
+            children: [
+              iconBuilder(iconColor),
+              const SizedBox(height: 8),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: isActive ? FontWeight.w600 : FontWeight.w500,
+                  color: isActive ? AppTheme.textDark : AppTheme.textLight,
+                ),
+                textAlign: TextAlign.center,
               ),
-              textAlign: TextAlign.center,
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -431,50 +445,105 @@ class _FeedingRecordTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final (icon, label, color, mirrored) = switch (record.type) {
-      FeedingType.leftBreast => (FontAwesomeIcons.personBreastfeeding, 'Pecho Izquierdo', AppTheme.breastLeft, false),
-      FeedingType.rightBreast => (FontAwesomeIcons.personBreastfeeding, 'Pecho Derecho', AppTheme.breastRight, true),
-      FeedingType.bottle => (MdiIcons.babyBottle, 'Biberón', AppTheme.primaryBlue, false),
+    final (icon, label, accentColor, mirrored) = switch (record.type) {
+      FeedingType.leftBreast => (
+        FontAwesomeIcons.personBreastfeeding,
+        'Izquierdo',
+        AppTheme.feedingHistoryLeftAccent,
+        false,
+      ),
+      FeedingType.rightBreast => (
+        FontAwesomeIcons.personBreastfeeding,
+        'Derecho',
+        AppTheme.feedingHistoryRightAccent,
+        true,
+      ),
+      FeedingType.bottle => (
+        MdiIcons.babyBottle,
+        'Biberón',
+        AppTheme.feedingHistoryBottleAccent,
+        false,
+      ),
     };
     final duration = record.durationSeconds != null
         ? formatDurationSeconds(record.durationSeconds!)
         : null;
     final amount = record.amountMl != null ? '${record.amountMl} ml' : null;
+    final borderRadius = BorderRadius.circular(AppTheme.cardRadius);
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: color.withValues(alpha: 0.2),
-          child: record.type == FeedingType.bottle
-              ? Icon(icon, color: color)
-              : (mirrored
-                  ? Transform(
-                      alignment: Alignment.center,
-                      transform: Matrix4.diagonal3Values(-1, 1, 1),
-                      child: FaIcon(icon, color: color),
-                    )
-                  : FaIcon(icon, color: color)),
-        ),
-        title: Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
-        subtitle: Text(
-          [
-            DateFormat('d MMM, HH:mm').format(record.dateTime),
-            duration,
-            amount,
-          ].whereType<String>().join(' • '),
-        ),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            IconButton(
-              icon: const Icon(Icons.edit, size: 20),
-              onPressed: () => _showEditDialog(context, record),
-            ),
-            IconButton(
-              icon: const Icon(Icons.delete, color: Colors.red, size: 20),
-              onPressed: record.id != null ? () => IsarService.deleteFeedingRecord(record.id!) : () {},
-            ),
-          ],
+      clipBehavior: Clip.antiAlias,
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: borderRadius,
+        side: BorderSide(color: AppTheme.fieldBorder.withValues(alpha: 0.65)),
+      ),
+      child: ClipRRect(
+        borderRadius: borderRadius,
+        child: IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(width: 4, color: accentColor),
+              Expanded(
+                child: ListTile(
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 4,
+                  ),
+                  leading: CircleAvatar(
+                    backgroundColor: accentColor.withValues(alpha: 0.18),
+                    child: record.type == FeedingType.bottle
+                        ? Icon(icon, color: accentColor, size: 22)
+                        : (mirrored
+                              ? Transform(
+                                  alignment: Alignment.center,
+                                  transform: Matrix4.diagonal3Values(-1, 1, 1),
+                                  child: FaIcon(
+                                    icon,
+                                    color: accentColor,
+                                    size: 20,
+                                  ),
+                                )
+                              : FaIcon(icon, color: accentColor, size: 20)),
+                  ),
+                  title: Text(
+                    label,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: accentColor.withValues(alpha: 0.92),
+                    ),
+                  ),
+                  subtitle: Text(
+                    [
+                      DateFormat('d MMM, HH:mm').format(record.dateTime),
+                      duration,
+                      amount,
+                    ].whereType<String>().join(' • '),
+                  ),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.edit, size: 20),
+                        onPressed: () => _showEditDialog(context, record),
+                      ),
+                      IconButton(
+                        icon: const Icon(
+                          Icons.delete,
+                          color: Colors.red,
+                          size: 20,
+                        ),
+                        onPressed: record.id != null
+                            ? () => IsarService.deleteFeedingRecord(record.id!)
+                            : () {},
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -483,14 +552,18 @@ class _FeedingRecordTile extends StatelessWidget {
   void _showEditDialog(BuildContext context, FeedingRecord record) {
     if (record.type == FeedingType.bottle) {
       final controller = TextEditingController(text: '${record.amountMl ?? 0}');
-      var selectedDate = DateTime(record.dateTime.year, record.dateTime.month, record.dateTime.day);
+      var selectedDate = DateTime(
+        record.dateTime.year,
+        record.dateTime.month,
+        record.dateTime.day,
+      );
       var selectedTime = TimeOfDay.fromDateTime(record.dateTime);
       showModalBottomSheet(
         context: context,
         isScrollControlled: true,
         backgroundColor: Colors.transparent,
         builder: (ctx) => StatefulBuilder(
-            builder: (context, setState) => EditBottomSheet(
+          builder: (context, setState) => EditBottomSheet(
             title: 'Editar biberón',
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -498,9 +571,9 @@ class _FeedingRecordTile extends StatelessWidget {
                 Text(
                   'Cantidad (ml)',
                   style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                        fontWeight: FontWeight.w600,
-                        color: AppTheme.textDark,
-                      ),
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.textDark,
+                  ),
                 ),
                 const SizedBox(height: 10),
                 TextField(
@@ -539,10 +612,15 @@ class _FeedingRecordTile extends StatelessWidget {
               final ml = int.tryParse(controller.text.trim());
               if (ml != null && ml > 0) {
                 final dt = DateTime(
-                  selectedDate.year, selectedDate.month, selectedDate.day,
-                  selectedTime.hour, selectedTime.minute,
+                  selectedDate.year,
+                  selectedDate.month,
+                  selectedDate.day,
+                  selectedTime.hour,
+                  selectedTime.minute,
                 );
-                await IsarService.updateFeedingRecord(record.copyWith(amountMl: ml, dateTime: dt));
+                await IsarService.updateFeedingRecord(
+                  record.copyWith(amountMl: ml, dateTime: dt),
+                );
                 if (ctx.mounted) Navigator.pop(ctx);
               }
             },
@@ -561,7 +639,7 @@ class _FeedingRecordTile extends StatelessWidget {
         backgroundColor: Colors.transparent,
         builder: (ctx) => StatefulBuilder(
           builder: (context, setState) => EditBottomSheet(
-            title: 'Editar toma de pecho',
+            title: 'Editar toma',
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -587,19 +665,24 @@ class _FeedingRecordTile extends StatelessWidget {
             onCancel: () => Navigator.pop(ctx),
             onSave: () async {
               final start = DateTime(
-                selectedDate.year, selectedDate.month, selectedDate.day,
-                selectedStartTime.hour, selectedStartTime.minute,
+                selectedDate.year,
+                selectedDate.month,
+                selectedDate.day,
+                selectedStartTime.hour,
+                selectedStartTime.minute,
               );
               final end = DateTime(
-                selectedDate.year, selectedDate.month, selectedDate.day,
-                selectedEndTime.hour, selectedEndTime.minute,
+                selectedDate.year,
+                selectedDate.month,
+                selectedDate.day,
+                selectedEndTime.hour,
+                selectedEndTime.minute,
               );
               var durationSec = end.difference(start).inSeconds;
               if (durationSec < 0) durationSec += 86400;
-              await IsarService.updateFeedingRecord(record.copyWith(
-                dateTime: start,
-                durationSeconds: durationSec,
-              ));
+              await IsarService.updateFeedingRecord(
+                record.copyWith(dateTime: start, durationSeconds: durationSec),
+              );
               if (ctx.mounted) Navigator.pop(ctx);
             },
           ),

@@ -55,7 +55,12 @@ class _BottleViewState extends ConsumerState<BottleView> {
         body: SingleChildScrollView(
           keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
           child: Padding(
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.fromLTRB(
+              AppTheme.screenEdgePadding,
+              24,
+              AppTheme.screenEdgePadding,
+              24,
+            ),
             child: Form(
               key: _formKey,
               child: Column(

@@ -116,6 +116,7 @@ class StorageServiceFirebase implements StorageService {
       birthDate: DateTime.parse(data['birthDate'] as String),
       createdAt: data['createdAt'] != null ? DateTime.parse(data['createdAt'] as String) : null,
       photoUrl: data['photoUrl'] as String?,
+      heightCm: (data['heightCm'] as num?)?.toDouble(),
     );
   }
 
@@ -130,6 +131,7 @@ class StorageServiceFirebase implements StorageService {
         'birthDate': profile.birthDate.toIso8601String(),
         'createdAt': profile.createdAt?.toIso8601String(),
         'photoUrl': profile.photoUrl,
+        'heightCm': profile.heightCm,
       },
     }, SetOptions(merge: true));
   }

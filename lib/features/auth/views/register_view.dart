@@ -103,7 +103,12 @@ class _RegisterViewState extends ConsumerState<RegisterView> {
         ),
         child: SafeArea(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.fromLTRB(
+              AppTheme.screenEdgePadding,
+              24,
+              AppTheme.screenEdgePadding,
+              24,
+            ),
             child: Form(
               key: _formKey,
               child: Column(

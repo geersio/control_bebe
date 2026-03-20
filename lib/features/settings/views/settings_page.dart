@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
@@ -35,10 +36,19 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       birthDate: DateTime.now().subtract(const Duration(days: 30)),
     );
     final nameController = TextEditingController(text: baby.name);
+    final heightController = TextEditingController(
+      text: baby.heightCm == null
+          ? ''
+          : (baby.heightCm == baby.heightCm!.roundToDouble()
+              ? '${baby.heightCm!.round()}'
+              : '${baby.heightCm}'),
+    );
     var isMale = baby.isMale;
     var birthDate = baby.birthDate;
 
-    final result = await showModalBottomSheet<BabyProfile?>(
+    BabyProfile? result;
+    try {
+      result = await showModalBottomSheet<BabyProfile?>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
@@ -106,6 +116,16 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   ],
                 ),
                 const SizedBox(height: 16),
+                TextFormField(
+                  controller: heightController,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(
+                    labelText: 'Altura (cm)',
+                    hintText: 'Opcional, ej. 58',
+                    prefixIcon: Icon(Icons.straighten_outlined),
+                  ),
+                ),
+                const SizedBox(height: 16),
                 InkWell(
                   onTap: () async {
                     final date = await showDatePicker(
@@ -156,10 +176,33 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                         onPressed: () {
                           final name = nameController.text.trim();
                           if (name.isEmpty) return;
+                          final heightRaw = heightController.text.trim().replaceAll(',', '.');
+                          double? heightCm;
+                          if (heightRaw.isEmpty) {
+                            heightCm = null;
+                          } else {
+                            heightCm = double.tryParse(heightRaw);
+                            if (heightCm == null) {
+                              ScaffoldMessenger.of(ctx).showSnackBar(
+                                const SnackBar(content: Text('Altura inválida')),
+                              );
+                              return;
+                            }
+                            if (heightCm < 25 || heightCm > 120) {
+                              ScaffoldMessenger.of(ctx).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Altura debe estar entre 25 y 120 cm'),
+                                ),
+                              );
+                              return;
+                            }
+                          }
                           final profile = baby.copyWith(
                             name: name,
                             isMale: isMale,
                             birthDate: birthDate,
+                            heightCm: heightCm,
+                            setHeightCm: true,
                           );
                           widget.onProfileSaved?.call(profile);
                           if (ctx.mounted) Navigator.pop(ctx, profile);
@@ -176,6 +219,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         ),
       ),
     );
+    } finally {
+      nameController.dispose();
+      heightController.dispose();
+    }
     if (result != null && mounted) setState(() => _baby = result);
   }
 
@@ -237,14 +284,22 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         ),
       ),
       body: SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.fromLTRB(
+                AppTheme.screenEdgePadding,
+                16,
+                AppTheme.screenEdgePadding,
+                24,
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   _SettingsCard(
                     title: 'Perfil del Bebé',
-                    icon: Icons.child_care,
-                    iconColor: AppTheme.primaryPink,
+                    leading: FaIcon(
+                      FontAwesomeIcons.baby,
+                      color: AppTheme.primaryPink,
+                      size: 22,
+                    ),
                     children: [
                       if (_baby != null) ...[
                         _ProfileRow(
@@ -255,6 +310,13 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                         _ProfileRow(
                           label: 'Fecha de nacimiento',
                           value: DateFormat('d MMM yyyy', 'es').format(_baby!.birthDate),
+                        ),
+                        const SizedBox(height: 12),
+                        _ProfileRow(
+                          label: 'Altura',
+                          value: _baby!.heightCm != null
+                              ? '${_baby!.heightCm == _baby!.heightCm!.roundToDouble() ? _baby!.heightCm!.round() : _baby!.heightCm} cm'
+                              : '—',
                         ),
                       ] else
                         Padding(
@@ -287,8 +349,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   const SizedBox(height: 16),
                   _SettingsCard(
                     title: 'Compartir Familia',
-                    icon: Icons.share,
-                    iconColor: AppTheme.primaryBlue,
+                    leading: Icon(Icons.share, color: AppTheme.primaryBlue, size: 24),
                     children: [
                       const Padding(
                         padding: EdgeInsets.only(bottom: 12),
@@ -306,8 +367,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   const SizedBox(height: 16),
                   _SettingsCard(
                     title: 'Cerrar Sesión',
-                    icon: Icons.logout,
-                    iconColor: AppTheme.textDark,
+                    leading: Icon(Icons.logout, color: AppTheme.textDark, size: 24),
                     children: [
                       SizedBox(
                         width: double.infinity,
@@ -492,14 +552,12 @@ class _QRButtonState extends State<_QRButton> {
 
 class _SettingsCard extends StatelessWidget {
   final String title;
-  final IconData icon;
-  final Color iconColor;
+  final Widget leading;
   final List<Widget> children;
 
   const _SettingsCard({
     required this.title,
-    required this.icon,
-    required this.iconColor,
+    required this.leading,
     required this.children,
   });
 
@@ -514,7 +572,10 @@ class _SettingsCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                Icon(icon, color: iconColor, size: 24),
+                SizedBox(
+                  width: 28,
+                  child: Center(child: leading),
+                ),
                 const SizedBox(width: 12),
                 Text(
                   title,
