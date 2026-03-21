@@ -138,11 +138,38 @@ class StorageServiceFirebase implements StorageService {
 
   static int _localId() => DateTime.now().microsecondsSinceEpoch;
 
+  /// Reintenta la suscripción si Firestore devuelve permission-denied (p. ej. familia
+  /// aún no propagada), para no dejar el [StreamProvider] en error permanente.
+  Stream<List<T>> _resilientFamilyListStream<T>(
+    Stream<List<T>> Function() subscribe,
+  ) async* {
+    while (true) {
+      try {
+        await for (final list in subscribe()) {
+          yield list;
+        }
+        return;
+      } on FirebaseException catch (e) {
+        if (e.code == 'permission-denied') {
+          yield <T>[];
+          await Future<void>.delayed(const Duration(milliseconds: 600));
+          continue;
+        }
+        rethrow;
+      } on StateError {
+        yield <T>[];
+        return;
+      }
+    }
+  }
+
   @override
   Stream<List<WeightRecord>> watchWeightRecords() {
-    return Stream.fromFuture(_getOrCreateFamilyId()).asyncExpand((familyId) =>
-        _weights(familyId).orderBy('dateTime', descending: true).snapshots().map(
-            (s) => s.docs.map((d) => _weightFromDoc(d)).toList()));
+    return _resilientFamilyListStream(() => Stream.fromFuture(_getOrCreateFamilyId())
+        .asyncExpand((familyId) => _weights(familyId)
+            .orderBy('dateTime', descending: true)
+            .snapshots()
+            .map((s) => s.docs.map(_weightFromDoc).toList())));
   }
 
   @override
@@ -190,9 +217,11 @@ class StorageServiceFirebase implements StorageService {
 
   @override
   Stream<List<DiaperRecord>> watchDiaperRecords() {
-    return Stream.fromFuture(_getOrCreateFamilyId()).asyncExpand((familyId) =>
-        _diapers(familyId).orderBy('dateTime', descending: true).snapshots().map(
-            (s) => s.docs.map((d) => _diaperFromDoc(d)).toList()));
+    return _resilientFamilyListStream(() => Stream.fromFuture(_getOrCreateFamilyId())
+        .asyncExpand((familyId) => _diapers(familyId)
+            .orderBy('dateTime', descending: true)
+            .snapshots()
+            .map((s) => s.docs.map(_diaperFromDoc).toList())));
   }
 
   @override
@@ -264,9 +293,11 @@ class StorageServiceFirebase implements StorageService {
 
   @override
   Stream<List<FeedingRecord>> watchFeedingRecords() {
-    return Stream.fromFuture(_getOrCreateFamilyId()).asyncExpand((familyId) =>
-        _feedings(familyId).orderBy('dateTime', descending: true).snapshots().map(
-            (s) => s.docs.map((d) => _feedingFromDoc(d)).toList()));
+    return _resilientFamilyListStream(() => Stream.fromFuture(_getOrCreateFamilyId())
+        .asyncExpand((familyId) => _feedings(familyId)
+            .orderBy('dateTime', descending: true)
+            .snapshots()
+            .map((s) => s.docs.map(_feedingFromDoc).toList())));
   }
 
   @override

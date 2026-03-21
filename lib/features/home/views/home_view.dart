@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -17,12 +18,22 @@ import '../../../core/models/weight_record.dart';
 import '../../settings/views/settings_page.dart';
 import '../../../core/models/enums.dart';
 import '../../../core/services/sabias_que_service.dart';
+import '../../../core/providers/record_stream_providers.dart';
 
 class HomeView extends ConsumerStatefulWidget {
+  final ScrollController scrollController;
   final void Function(int index)? onNavigateToTab;
   final VoidCallback? onTitleTap;
+  /// Cuando es true, la pestaña Inicio está visible (para recargar datos al volver de otras pestañas).
+  final bool isActiveTab;
 
-  const HomeView({super.key, this.onNavigateToTab, this.onTitleTap});
+  const HomeView({
+    super.key,
+    required this.scrollController,
+    this.onNavigateToTab,
+    this.onTitleTap,
+    this.isActiveTab = true,
+  });
 
   @override
   ConsumerState<HomeView> createState() => _HomeViewState();
@@ -39,6 +50,16 @@ class _HomeViewState extends ConsumerState<HomeView> {
   void initState() {
     super.initState();
     _homeDataFuture = _loadHomeData();
+  }
+
+  @override
+  void didUpdateWidget(HomeView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isActiveTab && !oldWidget.isActiveTab) {
+      setState(() {
+        _homeDataFuture = _loadHomeData();
+      });
+    }
   }
 
   Future<void> _handlePhotoTap(BabyProfile? baby) async {
@@ -178,7 +199,12 @@ class _HomeViewState extends ConsumerState<HomeView> {
         ),
       ),
     );
-    if (mounted) setState(() {});
+    if (mounted) {
+      ref.invalidate(weightRecordsStreamProvider);
+      ref.invalidate(diaperRecordsStreamProvider);
+      ref.invalidate(feedingRecordsStreamProvider);
+      setState(() {});
+    }
   }
 
   @override
@@ -194,6 +220,7 @@ class _HomeViewState extends ConsumerState<HomeView> {
                 data != null ? data['baby'] as BabyProfile? : null;
             final baby = _babyProfileOverride ?? babyFromFuture;
             return CustomScrollView(
+              controller: widget.scrollController,
               physics: const BouncingScrollPhysics(),
               slivers: [
                 SliverToBoxAdapter(
@@ -228,6 +255,7 @@ class _HomeViewState extends ConsumerState<HomeView> {
                           onTapWeight: () => _navigateTo('weight'),
                           onTapFeeding: () => _navigateTo('feeding'),
                           onTapDiapers: () => _navigateTo('diapers'),
+                          liveFeedingClock: widget.isActiveTab,
                         ),
                         const SizedBox(height: 20),
                         _ConsejoDelDiaCard(text: data['sabiasQue'] as String?),
@@ -277,14 +305,10 @@ class _HomeViewState extends ConsumerState<HomeView> {
       }
     }
 
-    int? lastFeedingMinutesAgo;
     String? lastFeedingDetail;
     DateTime? lastFeedingAt;
     if (lastFeeding != null) {
       lastFeedingAt = lastFeeding.dateTime;
-      lastFeedingMinutesAgo = DateTime.now()
-          .difference(lastFeeding.dateTime)
-          .inMinutes;
       switch (lastFeeding.type) {
         case FeedingType.leftBreast:
           final sec = lastFeeding.durationSeconds ?? 0;
@@ -320,7 +344,9 @@ class _HomeViewState extends ConsumerState<HomeView> {
       }
     }
 
-    final totalToday = wetCount + dirtyCount;
+    // Un "cambio" = un registro desde 00:00 local (como el bloque "Hoy" en pañales).
+    // No sumar moj+suc: un tipo "ambos" es un solo cambio.
+    final totalToday = diapersToday.length;
 
     return {
       'baby': baby,
@@ -331,7 +357,6 @@ class _HomeViewState extends ConsumerState<HomeView> {
         lastRecordedAt: lastWeight?.dateTime,
       ),
       'feeding': _FeedingData(
-        lastFeedingMinutesAgo: lastFeedingMinutesAgo,
         lastFeedingDetail: lastFeedingDetail,
         lastFeedingAt: lastFeedingAt,
       ),
@@ -347,20 +372,26 @@ class _HomeViewState extends ConsumerState<HomeView> {
 
 // --- Tarjeta perfil central ---
 
-/// Avatar con anillo degradado (azul claro arriba → primario abajo), halo blanco y sombra.
+/// Avatar con anillo degradado (azul o rosa según sexo), halo blanco y sombra.
 class _ProfileGradientAvatarRing extends StatelessWidget {
   /// Diámetro exterior del anillo (degradado + halo).
   static const double outerDiameter = 128;
   static const double _ringThickness = 5;
   static const double _whiteInset = 3;
 
+  final bool isMale;
   final Widget child;
 
-  const _ProfileGradientAvatarRing({required this.child});
+  const _ProfileGradientAvatarRing({
+    required this.isMale,
+    required this.child,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final topBlue = Color.lerp(Colors.white, AppTheme.palettePrimary, 0.42)!;
+    final accent =
+        isMale ? AppTheme.palettePrimary : AppTheme.genderFemalePink;
+    final topTint = Color.lerp(Colors.white, accent, 0.42)!;
     return SizedBox(
       width: outerDiameter,
       height: outerDiameter,
@@ -370,11 +401,11 @@ class _ProfileGradientAvatarRing extends StatelessWidget {
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [topBlue, AppTheme.palettePrimary],
+            colors: [topTint, accent],
           ),
           boxShadow: [
             BoxShadow(
-              color: AppTheme.palettePrimary.withValues(alpha: 0.28),
+              color: accent.withValues(alpha: 0.28),
               blurRadius: 10,
               spreadRadius: 0,
               offset: const Offset(0, 4),
@@ -440,7 +471,7 @@ class _BabyPhotoPlaceholderInner extends StatelessWidget {
         child: Icon(
           isMale ? Icons.face : Icons.face_3,
           size: 46,
-          color: AppTheme.palettePrimary,
+          color: isMale ? AppTheme.palettePrimary : AppTheme.genderFemalePink,
         ),
       ),
     );
@@ -449,7 +480,9 @@ class _BabyPhotoPlaceholderInner extends StatelessWidget {
 
 /// Botón “+” que sobresale del círculo, en esquina inferior derecha.
 class _AddPhotoBadgeOutside extends StatelessWidget {
-  const _AddPhotoBadgeOutside();
+  final Color accentColor;
+
+  const _AddPhotoBadgeOutside({required this.accentColor});
 
   @override
   Widget build(BuildContext context) {
@@ -457,7 +490,7 @@ class _AddPhotoBadgeOutside extends StatelessWidget {
       width: 30,
       height: 30,
       decoration: BoxDecoration(
-        color: AppTheme.palettePrimary,
+        color: accentColor,
         shape: BoxShape.circle,
         border: Border.all(color: Colors.white, width: 2.5),
         boxShadow: [
@@ -482,6 +515,8 @@ class _AvatarPlaceholderWithOutsideBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final accent =
+        isMale ? AppTheme.palettePrimary : AppTheme.genderFemalePink;
     return SizedBox(
       width: _ProfileGradientAvatarRing.outerDiameter,
       height: _ProfileGradientAvatarRing.outerDiameter,
@@ -490,13 +525,14 @@ class _AvatarPlaceholderWithOutsideBadge extends StatelessWidget {
         alignment: Alignment.center,
         children: [
           _ProfileGradientAvatarRing(
+            isMale: isMale,
             child: _BabyPhotoPlaceholderInner(isMale: isMale),
           ),
           // Mitad del badge asoma fuera del círculo; mantiene la esquina inferior derecha del avatar.
-          const Positioned(
+          Positioned(
             right: -2,
             bottom: -2,
-            child: _AddPhotoBadgeOutside(),
+            child: _AddPhotoBadgeOutside(accentColor: accent),
           ),
         ],
       ),
@@ -519,7 +555,9 @@ class _ProfileSummaryCard extends StatelessWidget {
     final totalDays = DateTime.now().difference(birthDate).inDays;
     final months = totalDays ~/ 30;
     final days = totalDays % 30;
-    return '$months MESES, $days DÍAS';
+    final mesWord = months == 1 ? 'MES' : 'MESES';
+    final diaWord = days == 1 ? 'DÍA' : 'DÍAS';
+    return '$months $mesWord, $days $diaWord';
   }
 
   @override
@@ -541,6 +579,7 @@ class _ProfileSummaryCard extends StatelessWidget {
               onTap: onPhotoTap,
               child: baby?.photoUrl != null && baby!.photoUrl!.isNotEmpty
                   ? _ProfileGradientAvatarRing(
+                      isMale: isMale,
                       child: _LargeAvatarImage(
                         photoUrl: baby!.photoUrl!,
                         isMale: isMale,
@@ -567,7 +606,7 @@ class _ProfileSummaryCard extends StatelessWidget {
                   isMale ? Icons.male : Icons.female,
                   color: isMale
                       ? AppTheme.genderMaleBabyBlue
-                      : AppTheme.palettePrimary,
+                      : AppTheme.genderFemalePink,
                   size: 28,
                 ),
               ],
@@ -667,6 +706,8 @@ class _LargeAvatarImage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final placeholderColor =
+        isMale ? AppTheme.textLight : AppTheme.genderFemalePink;
     if (photoUrl.startsWith('data:')) {
       try {
         final base64 = photoUrl.split(',').last;
@@ -679,14 +720,14 @@ class _LargeAvatarImage extends StatelessWidget {
           height: double.infinity,
           errorBuilder: (_, _, _) => Icon(
             isMale ? Icons.face : Icons.face_3,
-            color: AppTheme.textLight,
+            color: placeholderColor,
             size: 48,
           ),
         );
       } catch (_) {
         return Icon(
           isMale ? Icons.face : Icons.face_3,
-          color: AppTheme.textLight,
+          color: placeholderColor,
           size: 48,
         );
       }
@@ -699,7 +740,7 @@ class _LargeAvatarImage extends StatelessWidget {
       height: double.infinity,
       errorBuilder: (_, _, _) => Icon(
         isMale ? Icons.face : Icons.face_3,
-        color: AppTheme.textLight,
+        color: placeholderColor,
         size: 48,
       ),
     );
@@ -715,6 +756,7 @@ class _ResumenDeHoyBlock extends StatelessWidget {
   final VoidCallback onTapWeight;
   final VoidCallback onTapFeeding;
   final VoidCallback onTapDiapers;
+  final bool liveFeedingClock;
 
   const _ResumenDeHoyBlock({
     required this.weight,
@@ -723,6 +765,7 @@ class _ResumenDeHoyBlock extends StatelessWidget {
     required this.onTapWeight,
     required this.onTapFeeding,
     required this.onTapDiapers,
+    this.liveFeedingClock = true,
   });
 
   @override
@@ -759,7 +802,11 @@ class _ResumenDeHoyBlock extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 16),
-        _UltimaTomaCard(data: feeding, onTap: onTapFeeding),
+        _UltimaTomaCard(
+          data: feeding,
+          onTap: onTapFeeding,
+          liveClockActive: liveFeedingClock,
+        ),
         const SizedBox(height: 14),
         IntrinsicHeight(
           child: Row(
@@ -780,15 +827,66 @@ class _ResumenDeHoyBlock extends StatelessWidget {
   }
 }
 
-class _UltimaTomaCard extends StatelessWidget {
+class _UltimaTomaCard extends StatefulWidget {
   final _FeedingData data;
   final VoidCallback onTap;
+  final bool liveClockActive;
 
-  const _UltimaTomaCard({required this.data, required this.onTap});
+  const _UltimaTomaCard({
+    required this.data,
+    required this.onTap,
+    this.liveClockActive = true,
+  });
 
-  String _nextFeedingHint() {
-    if (data.lastFeedingAt == null) return '';
-    final next = data.lastFeedingAt!.add(const Duration(hours: 3));
+  @override
+  State<_UltimaTomaCard> createState() => _UltimaTomaCardState();
+}
+
+class _UltimaTomaCardState extends State<_UltimaTomaCard>
+    with WidgetsBindingObserver {
+  Timer? _tickTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _syncTimer();
+  }
+
+  @override
+  void didUpdateWidget(covariant _UltimaTomaCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.liveClockActive != widget.liveClockActive ||
+        oldWidget.data.lastFeedingAt != widget.data.lastFeedingAt) {
+      _syncTimer();
+      if (mounted) setState(() {});
+    }
+  }
+
+  void _syncTimer() {
+    _tickTimer?.cancel();
+    _tickTimer = null;
+    if (!widget.liveClockActive) return;
+    _tickTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _tickTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && mounted) setState(() {});
+  }
+
+  String _nextFeedingHint(DateTime? lastAt) {
+    if (lastAt == null) return '';
+    final next = lastAt.add(const Duration(hours: 3));
     final diff = next.difference(DateTime.now());
     if (diff.inMinutes <= 0) return 'Próxima toma pronto';
     return 'Próxima en ${formatMinutes(diff.inMinutes)}';
@@ -796,9 +894,13 @@ class _UltimaTomaCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final data = widget.data;
     final hasLast =
-        data.lastFeedingMinutesAgo != null && data.lastFeedingDetail != null;
-    final subHint = _nextFeedingHint();
+        data.lastFeedingAt != null && data.lastFeedingDetail != null;
+    final minutesAgo = data.lastFeedingAt != null
+        ? DateTime.now().difference(data.lastFeedingAt!).inMinutes
+        : null;
+    final subHint = _nextFeedingHint(data.lastFeedingAt);
 
     return Material(
       color: AppTheme.palettePrimary,
@@ -806,7 +908,7 @@ class _UltimaTomaCard extends StatelessWidget {
       shadowColor: Colors.black26,
       borderRadius: BorderRadius.circular(AppTheme.homeCardRadius),
       child: InkWell(
-        onTap: onTap,
+        onTap: widget.onTap,
         borderRadius: BorderRadius.circular(AppTheme.homeCardRadius),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(20, 20, 16, 20),
@@ -829,7 +931,7 @@ class _UltimaTomaCard extends StatelessWidget {
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            'Hace ${formatMinutes(data.lastFeedingMinutesAgo!)}',
+                            'Hace ${formatMinutes(minutesAgo!)}',
                             style: Theme.of(context).textTheme.headlineSmall
                                 ?.copyWith(
                                   fontWeight: FontWeight.w700,
@@ -939,6 +1041,17 @@ class _PesoResumenCard extends StatelessWidget {
                         color: AppTheme.textDark,
                       ),
                     ),
+                    if (data.currentKg == null) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        'No hay registros de peso. Toca para añadir el primero.',
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: AppTheme.textLight,
+                          fontWeight: FontWeight.w600,
+                          height: 1.35,
+                        ),
+                      ),
+                    ],
                     if (trend != null) ...[
                       const SizedBox(height: 8),
                       Text(
@@ -1023,22 +1136,36 @@ class _PanalesResumenCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 10),
                     Text(
-                      data.totalToday == 1
-                          ? '1 cambio'
-                          : '${data.totalToday} cambios',
+                      data.lastRecordedAt == null && data.totalToday == 0
+                          ? 'Sin registros'
+                          : (data.totalToday == 1
+                              ? '1 cambio'
+                              : '${data.totalToday} cambios'),
                       style: Theme.of(context).textTheme.titleLarge?.copyWith(
                         fontWeight: FontWeight.w700,
                         color: AppTheme.textDark,
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    Text(
-                      '${data.wetCount} mojados · ${data.dirtyCount} sucios',
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: AppTheme.textLight,
-                        fontWeight: FontWeight.w600,
+                    if (data.lastRecordedAt == null && data.totalToday == 0) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        'No hay pañales registrados. Toca para añadir el primero.',
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: AppTheme.textLight,
+                          fontWeight: FontWeight.w600,
+                          height: 1.35,
+                        ),
                       ),
-                    ),
+                    ] else ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        '${data.wetCount} mojados · ${data.dirtyCount} sucios',
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: AppTheme.textLight,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
                     if (lastLabel != null) ...[
                       const SizedBox(height: 8),
                       Text(
@@ -1493,12 +1620,10 @@ class _WeightData {
 }
 
 class _FeedingData {
-  final int? lastFeedingMinutesAgo;
   final String? lastFeedingDetail;
   final DateTime? lastFeedingAt;
 
   _FeedingData({
-    this.lastFeedingMinutesAgo,
     this.lastFeedingDetail,
     this.lastFeedingAt,
   });

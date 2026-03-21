@@ -4,6 +4,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:material_design_icons_flutter/material_design_icons_flutter.dart';
 
 import '../../../core/db/isar_service.dart';
+import '../../../core/providers/record_stream_providers.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../settings/views/settings_page.dart';
 import 'home_view.dart';
@@ -20,31 +21,83 @@ class MainNavigation extends ConsumerStatefulWidget {
 
 class _MainNavigationState extends ConsumerState<MainNavigation> {
   int _currentIndex = 0;
+  final _homeScrollController = ScrollController();
   final _diapersScrollController = ScrollController();
   final _feedingScrollController = ScrollController();
   final _weightScrollController = ScrollController();
 
+  static const _scrollTopDuration = Duration(milliseconds: 300);
+  static const _scrollTopCurve = Curves.easeOut;
+
   @override
   void dispose() {
+    _homeScrollController.dispose();
     _diapersScrollController.dispose();
     _feedingScrollController.dispose();
     _weightScrollController.dispose();
     super.dispose();
   }
 
+  void _scrollHomeToTop({required bool animated}) {
+    if (!_homeScrollController.hasClients) return;
+    if (animated) {
+      _homeScrollController.animateTo(
+        0,
+        duration: _scrollTopDuration,
+        curve: _scrollTopCurve,
+      );
+    } else {
+      _homeScrollController.jumpTo(0);
+    }
+  }
+
+  void _goHome() {
+    if (_currentIndex == 0) {
+      _scrollHomeToTop(animated: true);
+    } else {
+      setState(() => _currentIndex = 0);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _scrollHomeToTop(animated: false);
+      });
+    }
+  }
+
   void _onTabTap(int index) {
     if (index == _currentIndex) {
       switch (index) {
+        case 0:
+          _scrollHomeToTop(animated: true);
+          break;
         case 1:
-          _diapersScrollController.animateTo(0, duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
+          _diapersScrollController.animateTo(
+            0,
+            duration: _scrollTopDuration,
+            curve: _scrollTopCurve,
+          );
           break;
         case 2:
-          _feedingScrollController.animateTo(0, duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
+          _feedingScrollController.animateTo(
+            0,
+            duration: _scrollTopDuration,
+            curve: _scrollTopCurve,
+          );
           break;
         case 3:
-          _weightScrollController.animateTo(0, duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
+          _weightScrollController.animateTo(
+            0,
+            duration: _scrollTopDuration,
+            curve: _scrollTopCurve,
+          );
           break;
       }
+      return;
+    }
+    if (index == 0) {
+      setState(() => _currentIndex = 0);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _scrollHomeToTop(animated: false);
+      });
+      return;
     }
     setState(() => _currentIndex = index);
   }
@@ -56,37 +109,39 @@ class _MainNavigationState extends ConsumerState<MainNavigation> {
       context,
       MaterialPageRoute(builder: (_) => SettingsPage(initialBaby: baby)),
     );
+    if (!mounted) return;
+    ref.invalidate(weightRecordsStreamProvider);
+    ref.invalidate(diaperRecordsStreamProvider);
+    ref.invalidate(feedingRecordsStreamProvider);
   }
 
   @override
   Widget build(BuildContext context) {
-    void goToHome() => setState(() => _currentIndex = 0);
     final screens = [
       HomeView(
+        scrollController: _homeScrollController,
         onNavigateToTab: (i) => setState(() => _currentIndex = i),
-        onTitleTap: goToHome,
+        onTitleTap: _goHome,
+        isActiveTab: _currentIndex == 0,
       ),
       DiapersView(
-        onTitleTap: goToHome,
+        onTitleTap: _goHome,
         onSettingsTap: _openSettings,
         scrollController: _diapersScrollController,
       ),
       FeedingView(
-        onTitleTap: goToHome,
+        onTitleTap: _goHome,
         onSettingsTap: _openSettings,
         scrollController: _feedingScrollController,
       ),
       WeightView(
-        onTitleTap: goToHome,
+        onTitleTap: _goHome,
         onSettingsTap: _openSettings,
         scrollController: _weightScrollController,
       ),
     ];
     return Scaffold(
-      body: IndexedStack(
-        index: _currentIndex,
-        children: screens,
-      ),
+      body: IndexedStack(index: _currentIndex, children: screens),
       bottomNavigationBar: Material(
         elevation: 12,
         shadowColor: Colors.black26,
@@ -94,12 +149,13 @@ class _MainNavigationState extends ConsumerState<MainNavigation> {
         child: ClipRRect(
           borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
           child: Container(
-            decoration: const BoxDecoration(
-              color: AppTheme.cardBackground,
-            ),
+            decoration: const BoxDecoration(color: AppTheme.cardBackground),
             child: SafeArea(
               child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+                padding: const EdgeInsets.symmetric(
+                  vertical: 10,
+                  horizontal: 4,
+                ),
                 child: Row(
                   children: [
                     Expanded(
@@ -110,7 +166,7 @@ class _MainNavigationState extends ConsumerState<MainNavigation> {
                         isSelected: _currentIndex == 0,
                         selectedBackground: AppTheme.navHomeSelectedFill,
                         selectedForeground: AppTheme.navHomeSelectedFg,
-                        onTap: () => setState(() => _currentIndex = 0),
+                        onTap: () => _onTabTap(0),
                       ),
                     ),
                     Expanded(
@@ -158,8 +214,10 @@ class _MainNavigationState extends ConsumerState<MainNavigation> {
 
 /// Alimentación (Font Awesome): tamaño de referencia, algo menor que Material/MDI.
 const double _kBottomNavIconSizeFa = 24;
+
 /// Inicio, pañales y peso ([Icon] / MDI).
 const double _kBottomNavIconSizeMaterial = 30;
+
 /// Misma altura de cápsula en las cuatro pestañas (hueco repartido por [Expanded]).
 const double _kNavPillHeight = 64;
 
@@ -183,9 +241,9 @@ class _NavItem extends StatelessWidget {
     required this.selectedForeground,
     required this.onTap,
   }) : assert(
-          (fontAwesomeIcon != null && icon == null && activeIcon == null) ||
-              (fontAwesomeIcon == null && icon != null && activeIcon != null),
-        );
+         (fontAwesomeIcon != null && icon == null && activeIcon == null) ||
+             (fontAwesomeIcon == null && icon != null && activeIcon != null),
+       );
 
   @override
   Widget build(BuildContext context) {
@@ -234,12 +292,12 @@ class _NavItem extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      fontSize: 10,
-                      letterSpacing: 0.35,
-                      height: 1.05,
-                      fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                      color: isSelected ? selectedForeground : inactiveColor,
-                    ),
+                  fontSize: 10,
+                  letterSpacing: 0.35,
+                  height: 1.05,
+                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                  color: isSelected ? selectedForeground : inactiveColor,
+                ),
               ),
             ],
           ),

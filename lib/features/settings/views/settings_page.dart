@@ -245,7 +245,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: FilledButton.styleFrom(
-              backgroundColor: AppTheme.primaryPink,
+              backgroundColor: Theme.of(ctx).colorScheme.error,
+              foregroundColor: Theme.of(ctx).colorScheme.onError,
             ),
             child: const Text('Cerrar sesión'),
           ),
@@ -366,18 +367,29 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   ),
                   const SizedBox(height: 16),
                   _SettingsCard(
-                    title: 'Cerrar Sesión',
-                    leading: Icon(Icons.logout, color: AppTheme.textDark, size: 24),
+                    title: 'Cerrar sesión',
+                    titleColor: Theme.of(context).colorScheme.error,
+                    leading: Icon(
+                      Icons.logout,
+                      color: Theme.of(context).colorScheme.error,
+                      size: 24,
+                    ),
                     children: [
                       SizedBox(
                         width: double.infinity,
                         child: OutlinedButton.icon(
                           onPressed: _signOut,
-                          icon: const Icon(Icons.logout, size: 18),
+                          icon: Icon(
+                            Icons.logout,
+                            size: 18,
+                            color: Theme.of(context).colorScheme.error,
+                          ),
                           label: const Text('Cerrar sesión'),
                           style: OutlinedButton.styleFrom(
-                            foregroundColor: AppTheme.primaryPink,
-                            side: const BorderSide(color: AppTheme.primaryPink),
+                            foregroundColor: Theme.of(context).colorScheme.error,
+                            side: BorderSide(
+                              color: Theme.of(context).colorScheme.error,
+                            ),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(AppTheme.fieldRadius),
                             ),
@@ -554,15 +566,18 @@ class _SettingsCard extends StatelessWidget {
   final String title;
   final Widget leading;
   final List<Widget> children;
+  final Color? titleColor;
 
   const _SettingsCard({
     required this.title,
     required this.leading,
     required this.children,
+    this.titleColor,
   });
 
   @override
   Widget build(BuildContext context) {
+    final titleCol = titleColor ?? AppTheme.textDark;
     return Card(
       margin: EdgeInsets.zero,
       child: Padding(
@@ -581,7 +596,7 @@ class _SettingsCard extends StatelessWidget {
                   title,
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.w600,
-                    color: AppTheme.textDark,
+                    color: titleCol,
                   ),
                 ),
               ],

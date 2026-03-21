@@ -9,6 +9,7 @@ import '../../../core/theme/edit_dialog_theme.dart';
 import '../../../core/db/isar_service.dart';
 import '../../../core/providers/record_stream_providers.dart';
 import '../../../core/widgets/edit_dialog_fields.dart';
+import '../../../core/widgets/stream_record_load_error.dart';
 import '../../../core/widgets/edit_bottom_sheet.dart';
 import '../../../core/models/baby_profile.dart';
 import '../../../core/models/weight_record.dart';
@@ -243,15 +244,11 @@ class _WeightViewState extends ConsumerState<WeightView> {
                                         child: CircularProgressIndicator(),
                                       ),
                                     ),
-                                    error: (e, _) => Padding(
-                                      padding: const EdgeInsets.all(8),
-                                      child: Text(
-                                        'No se pudieron cargar los pesos: $e',
-                                        style: TextStyle(
-                                          color: Theme.of(
-                                            context,
-                                          ).colorScheme.error,
-                                        ),
+                                    error: (e, _) => StreamRecordLoadError(
+                                      message:
+                                          'No se pudieron cargar los pesos. Comprueba la conexión o reintenta.',
+                                      onRetry: () => ref.invalidate(
+                                        weightRecordsStreamProvider,
                                       ),
                                     ),
                                   ),
@@ -334,7 +331,18 @@ class _WeightViewState extends ConsumerState<WeightView> {
                                 ),
                               ),
                             ),
-                            error: (_, _) => const SizedBox.shrink(),
+                            error: (e, _) => Card(
+                              child: Padding(
+                                padding: const EdgeInsets.all(24),
+                                child: StreamRecordLoadError(
+                                  message:
+                                      'No se pudo cargar la gráfica de peso.',
+                                  onRetry: () => ref.invalidate(
+                                    weightRecordsStreamProvider,
+                                  ),
+                                ),
+                              ),
+                            ),
                           ),
                           const SizedBox(height: 24),
                           recordsAsync.when(
@@ -354,7 +362,12 @@ class _WeightViewState extends ConsumerState<WeightView> {
                               ],
                             ),
                             loading: () => const SizedBox.shrink(),
-                            error: (_, _) => const SizedBox.shrink(),
+                            error: (e, _) => StreamRecordLoadError(
+                              message: 'No se pudo cargar el historial de peso.',
+                              onRetry: () => ref.invalidate(
+                                weightRecordsStreamProvider,
+                              ),
+                            ),
                           ),
                         ],
                       ),

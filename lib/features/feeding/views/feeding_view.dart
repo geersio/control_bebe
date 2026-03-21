@@ -14,6 +14,7 @@ import '../../../core/db/isar_service.dart';
 import '../../../core/providers/record_stream_providers.dart';
 import '../../../core/widgets/edit_dialog_fields.dart';
 import '../../../core/widgets/edit_bottom_sheet.dart';
+import '../../../core/widgets/stream_record_load_error.dart';
 import '../../../core/models/feeding_record.dart';
 import '../../../core/models/lactation_timer.dart';
 import '../../../core/models/enums.dart';
@@ -293,10 +294,11 @@ class _FeedingViewState extends ConsumerState<FeedingView> {
                           loading: () => const Center(
                             child: CircularProgressIndicator(),
                           ),
-                          error: (e, _) => Text(
-                            'Error al cargar: $e',
-                            style: TextStyle(
-                              color: Theme.of(context).colorScheme.error,
+                          error: (e, _) => StreamRecordLoadError(
+                            message:
+                                'No se pudieron cargar las tomas. Reintenta o comprueba la conexión.',
+                            onRetry: () => ref.invalidate(
+                              feedingRecordsStreamProvider,
                             ),
                           ),
                         ),

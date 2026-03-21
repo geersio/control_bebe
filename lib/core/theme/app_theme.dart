@@ -58,6 +58,8 @@ class AppTheme {
 
   /// Icono de sexo masculino (azul bebé suave).
   static const Color genderMaleBabyBlue = Color(0xFF7DBEE8);
+  /// Anillo de perfil / icono hembra (rosa).
+  static const Color genderFemalePink = Color(0xFFE85C8A);
 
   /// Compatibilidad con el resto de la app.
   static const Color primaryBlue = palettePrimary;

@@ -11,6 +11,7 @@ import '../../../core/db/isar_service.dart';
 import '../../../core/providers/record_stream_providers.dart';
 import '../../../core/widgets/edit_dialog_fields.dart';
 import '../../../core/widgets/edit_bottom_sheet.dart';
+import '../../../core/widgets/stream_record_load_error.dart';
 import '../../../core/models/diaper_record.dart';
 import '../../../core/models/enums.dart';
 
@@ -234,10 +235,11 @@ class _DiapersViewState extends ConsumerState<DiapersView> {
                               child: CircularProgressIndicator(),
                             );
                           },
-                          error: (e, _) => Text(
-                            'Error al cargar: $e',
-                            style: TextStyle(
-                              color: Theme.of(context).colorScheme.error,
+                          error: (e, _) => StreamRecordLoadError(
+                            message:
+                                'No se pudieron cargar los pañales. Reintenta o comprueba la conexión.',
+                            onRetry: () => ref.invalidate(
+                              diaperRecordsStreamProvider,
                             ),
                           ),
                         ),
