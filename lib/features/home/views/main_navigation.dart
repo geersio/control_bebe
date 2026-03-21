@@ -155,6 +155,7 @@ class _MainNavigationState extends ConsumerState<MainNavigation> {
             // top: false — el inset superior es para el notch/status; no aplica a la barra inferior.
             child: SafeArea(
               top: false,
+              bottom: false,
               child: Padding(
                 padding: const EdgeInsets.symmetric(
                   vertical: 10,

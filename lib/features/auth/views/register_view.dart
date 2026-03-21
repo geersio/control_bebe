@@ -95,6 +95,7 @@ class _RegisterViewState extends ConsumerState<RegisterView> {
           ),
         ),
         child: SafeArea(
+          bottom: false,
           child: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(
               horizontal: AppTheme.screenEdgePadding,

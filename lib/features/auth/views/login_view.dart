@@ -1,7 +1,8 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:flutter_svg/flutter_svg.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/auth/auth_service.dart';
@@ -25,6 +26,7 @@ class _LoginViewState extends ConsumerState<LoginView> {
   final _passwordFocusNode = FocusNode();
   bool _obscurePassword = true;
   bool _isLoading = false;
+
   /// Solo entrada anónima para QR: no usa [_isLoading] para no bloquear toda la tarjeta ni el botón principal.
   bool _guestQrLoading = false;
   String? _errorMessage;
@@ -179,7 +181,8 @@ class _LoginViewState extends ConsumerState<LoginView> {
   String _mapPasswordResetError(String code) {
     return switch (code) {
       'invalid-email' => 'Correo electrónico no válido',
-      'user-not-found' => 'No hay cuenta con este correo. Comprueba el email o regístrate.',
+      'user-not-found' =>
+        'No hay cuenta con este correo. Comprueba el email o regístrate.',
       'user-disabled' => 'Esta cuenta está deshabilitada',
       'operation-not-allowed' =>
         'Recuperación por correo no habilitada en Firebase (Authentication → Sign-in method → Email).',
@@ -212,8 +215,8 @@ class _LoginViewState extends ConsumerState<LoginView> {
                     Text(
                       'Te enviaremos un enlace para elegir una contraseña nueva.',
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: AppTheme.textLight,
-                          ),
+                        color: AppTheme.textLight,
+                      ),
                     ),
                     const SizedBox(height: 16),
                     TextField(
@@ -239,7 +242,9 @@ class _LoginViewState extends ConsumerState<LoginView> {
               ),
               actions: [
                 TextButton(
-                  onPressed: sending ? null : () => Navigator.of(dialogCtx).pop(),
+                  onPressed: sending
+                      ? null
+                      : () => Navigator.of(dialogCtx).pop(),
                   child: const Text('Cancelar'),
                 ),
                 FilledButton(
@@ -315,8 +320,11 @@ class _LoginViewState extends ConsumerState<LoginView> {
           ),
         ),
         child: SafeArea(
+          bottom: false,
           child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: AppTheme.screenEdgePadding),
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppTheme.screenEdgePadding,
+            ),
             child: Form(
               key: _formKey,
               child: Column(
@@ -355,21 +363,15 @@ class _LoginViewState extends ConsumerState<LoginView> {
             fit: BoxFit.contain,
           ),
         ),
-        const SizedBox(height: 20),
-        Text(
-          'MiBebé Diario',
-          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-            fontWeight: FontWeight.bold,
-            color: Colors.black,
-          ),
-          textAlign: TextAlign.center,
-        ),
         const SizedBox(height: 8),
         Text(
-          'Inicia sesión para acceder a tus registros',
-          style: Theme.of(
-            context,
-          ).textTheme.bodyMedium?.copyWith(color: AppTheme.textLight),
+          'MiBebé Diario',
+          style: GoogleFonts.nunito(
+            fontSize: 26,
+            fontWeight: FontWeight.w800,
+            color: AppTheme.textHeading,
+            height: 1.15,
+          ),
           textAlign: TextAlign.center,
         ),
       ],
@@ -447,7 +449,10 @@ class _LoginViewState extends ConsumerState<LoginView> {
               child: TextButton(
                 onPressed: _anyAuthBusy ? null : _openForgotPasswordDialog,
                 style: TextButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 4,
+                    horizontal: 8,
+                  ),
                   minimumSize: Size.zero,
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
@@ -475,8 +480,14 @@ class _LoginViewState extends ConsumerState<LoginView> {
               child: ElevatedButton(
                 onPressed: _anyAuthBusy ? null : _signInWithEmail,
                 style: ElevatedButton.styleFrom(
-                  minimumSize: const Size(double.infinity, _primaryActionHeight),
-                  maximumSize: const Size(double.infinity, _primaryActionHeight),
+                  minimumSize: const Size(
+                    double.infinity,
+                    _primaryActionHeight,
+                  ),
+                  maximumSize: const Size(
+                    double.infinity,
+                    _primaryActionHeight,
+                  ),
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   shape: RoundedRectangleBorder(
@@ -522,24 +533,25 @@ class _LoginViewState extends ConsumerState<LoginView> {
                   ),
                 ),
                 style: OutlinedButton.styleFrom(
-                  minimumSize: const Size(double.infinity, _primaryActionHeight),
-                  maximumSize: const Size(double.infinity, _primaryActionHeight),
+                  minimumSize: const Size(
+                    double.infinity,
+                    _primaryActionHeight,
+                  ),
+                  maximumSize: const Size(
+                    double.infinity,
+                    _primaryActionHeight,
+                  ),
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  side: const BorderSide(color: AppTheme.primaryBlue, width: 1.5),
+                  side: const BorderSide(
+                    color: AppTheme.primaryBlue,
+                    width: 1.5,
+                  ),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(AppTheme.cardRadius),
                   ),
                 ),
               ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Escanea el QR que te comparte la familia',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: AppTheme.textLight,
-                  ),
             ),
             const SizedBox(height: 24),
             Row(
@@ -548,7 +560,7 @@ class _LoginViewState extends ConsumerState<LoginView> {
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Text(
-                    'O CONTINÚA CON',
+                    'O INICIA SESIÓN CON',
                     style: TextStyle(
                       fontSize: 12,
                       color: Colors.grey.shade600,
@@ -565,10 +577,10 @@ class _LoginViewState extends ConsumerState<LoginView> {
                 Expanded(
                   child: ElevatedButton.icon(
                     onPressed: _anyAuthBusy ? null : _signInWithGoogle,
-                    icon: const FaIcon(
-                      FontAwesomeIcons.google,
-                      size: 20,
-                      color: Color(0xFF4285F4),
+                    icon: SvgPicture.asset(
+                      'assets/images/google_logo.svg',
+                      width: 20,
+                      height: 20,
                     ),
                     label: const Text(
                       'Google',
@@ -594,18 +606,19 @@ class _LoginViewState extends ConsumerState<LoginView> {
                     icon: const Icon(
                       Icons.apple,
                       size: 24,
-                      color: Colors.white,
+                      color: Colors.black,
                     ),
                     label: const Text(
                       'Apple',
                       style: TextStyle(
-                        color: Colors.white,
+                        color: Colors.black87,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.black,
-                      foregroundColor: Colors.white,
+                      backgroundColor: Colors.white,
+                      foregroundColor: Colors.black87,
+                      side: const BorderSide(color: Color(0xFFE0E0E0)),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),

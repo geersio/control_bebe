@@ -26,6 +26,7 @@ class EditBottomSheet extends StatelessWidget {
         borderRadius: BorderRadius.vertical(top: Radius.circular(AppTheme.dialogRadius)),
       ),
       child: SafeArea(
+        bottom: false,
         child: Padding(
           padding: EdgeInsets.only(
             bottom: MediaQuery.of(context).viewInsets.bottom,

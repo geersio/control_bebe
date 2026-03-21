@@ -82,6 +82,7 @@ class _HomeViewState extends ConsumerState<HomeView> {
       showDragHandle: true,
       builder: (sheetCtx) {
         return SafeArea(
+          bottom: false,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,

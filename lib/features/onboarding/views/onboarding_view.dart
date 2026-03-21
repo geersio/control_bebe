@@ -213,6 +213,7 @@ class _ChoiceScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: AppTheme.background,
       body: SafeArea(
+        bottom: false,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(
             AppTheme.screenEdgePadding,
@@ -512,6 +513,7 @@ class _CreateBabyScreen extends StatelessWidget {
             ),
             SafeArea(
               top: false,
+              bottom: false,
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(
                   AppTheme.screenEdgePadding,

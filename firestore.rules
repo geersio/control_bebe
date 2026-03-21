@@ -32,8 +32,10 @@ service cloud.firestore {
 
     // Documento de la familia (misma lógica que te funcionaba + get para QR join)
     match /families/{familyId} {
-      // Quien escanea QR puede leer el doc si existe (no puede listar la colección).
-      allow get: if request.auth != null && resource.exists;
+      // Get individual: solo hace falta estar logueado. NO exigir resource.exists:
+      // si el doc no existe, con "exists" en la regla Firestore devuelve permission-denied
+      // y el cliente nunca puede comprobar !snap.exists (p. ej. QR mal o otro proyecto).
+      allow get: if request.auth != null;
       allow list: if false;
 
       allow read, delete: if request.auth != null &&
