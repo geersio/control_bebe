@@ -251,7 +251,7 @@ class _HomeViewState extends ConsumerState<HomeView> {
                           weightKg: (data!['weight'] as _WeightData).currentKg,
                           onPhotoTap: () => _handlePhotoTap(baby),
                         ),
-                        const SizedBox(height: 24),
+                        const SizedBox(height: 20),
                         _ResumenDeHoyBlock(
                           weight: data['weight'] as _WeightData,
                           feeding: data['feeding'] as _FeedingData,
@@ -278,22 +278,20 @@ class _HomeViewState extends ConsumerState<HomeView> {
   Future<Map<String, dynamic>> _loadHomeData() async {
     final cachedBaby = _cachedBaby;
     _cachedBaby = null;
+    final baby =
+        cachedBaby ?? await IsarService.getBabyProfile();
     final results = await Future.wait([
-      cachedBaby != null
-          ? Future.value(cachedBaby)
-          : IsarService.getBabyProfile(),
       IsarService.getWeightRecords(),
       IsarService.getLastFeedingRecord(),
       IsarService.getDiaperRecordsToday(),
       IsarService.getLastDiaperRecord(),
-      _sabiasQueService.getFact(),
+      _sabiasQueService.getFact(birthDate: baby?.birthDate),
     ]);
-    final baby = results[0] as BabyProfile?;
-    final weightRecords = results[1] as List<WeightRecord>;
-    final lastFeeding = results[2] as FeedingRecord?;
-    final diapersToday = results[3] as List<DiaperRecord>;
-    final lastDiaperRecord = results[4] as DiaperRecord?;
-    final sabiasQue = results[5] as String?;
+    final weightRecords = results[0] as List<WeightRecord>;
+    final lastFeeding = results[1] as FeedingRecord?;
+    final diapersToday = results[2] as List<DiaperRecord>;
+    final lastDiaperRecord = results[3] as DiaperRecord?;
+    final sabiasQue = results[4] as String?;
 
     final lastWeight = weightRecords.isNotEmpty ? weightRecords.first : null;
     final prevWeight = weightRecords.length > 1 ? weightRecords[1] : null;
@@ -381,9 +379,9 @@ class _HomeViewState extends ConsumerState<HomeView> {
 /// Avatar con anillo degradado (azul o rosa según sexo), halo blanco y sombra.
 class _ProfileGradientAvatarRing extends StatelessWidget {
   /// Diámetro exterior del anillo (degradado + halo).
-  static const double outerDiameter = 128;
-  static const double _ringThickness = 5;
-  static const double _whiteInset = 3;
+  static const double outerDiameter = 108;
+  static const double _ringThickness = 4;
+  static const double _whiteInset = 2;
 
   final bool isMale;
   final Widget child;
@@ -412,13 +410,13 @@ class _ProfileGradientAvatarRing extends StatelessWidget {
           boxShadow: [
             BoxShadow(
               color: accent.withValues(alpha: 0.28),
-              blurRadius: 10,
+              blurRadius: 8,
               spreadRadius: 0,
-              offset: const Offset(0, 4),
+              offset: const Offset(0, 3),
             ),
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.06),
-              blurRadius: 6,
+              blurRadius: 5,
               offset: const Offset(0, 2),
             ),
           ],
@@ -476,7 +474,7 @@ class _BabyPhotoPlaceholderInner extends StatelessWidget {
       child: Center(
         child: Icon(
           isMale ? Icons.face : Icons.face_3,
-          size: 46,
+          size: 40,
           color: isMale ? AppTheme.palettePrimary : AppTheme.genderFemalePink,
         ),
       ),
@@ -493,22 +491,22 @@ class _AddPhotoBadgeOutside extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 30,
-      height: 30,
+      width: 26,
+      height: 26,
       decoration: BoxDecoration(
         color: accentColor,
         shape: BoxShape.circle,
-        border: Border.all(color: Colors.white, width: 2.5),
+        border: Border.all(color: Colors.white, width: 2),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.18),
-            blurRadius: 6,
+            blurRadius: 5,
             offset: const Offset(0, 2),
           ),
         ],
       ),
       alignment: Alignment.center,
-      child: const Icon(Icons.add, size: 18, color: Colors.white),
+      child: const Icon(Icons.add, size: 15, color: Colors.white),
     );
   }
 }
@@ -536,8 +534,8 @@ class _AvatarPlaceholderWithOutsideBadge extends StatelessWidget {
           ),
           // Esquina inferior derecha del avatar, más pegado al anillo que sobresaliendo.
           Positioned(
-            right: 6,
-            bottom: 6,
+            right: 4,
+            bottom: 4,
             child: _AddPhotoBadgeOutside(accentColor: accent),
           ),
         ],
@@ -578,7 +576,7 @@ class _ProfileSummaryCard extends StatelessWidget {
       shadowColor: Colors.black12,
       shape: AppTheme.homeCardShapeRounded,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
+        padding: const EdgeInsets.fromLTRB(16, 18, 16, 16),
         child: Column(
           children: [
             GestureDetector(
@@ -593,16 +591,16 @@ class _ProfileSummaryCard extends StatelessWidget {
                     )
                   : _AvatarPlaceholderWithOutsideBadge(isMale: isMale),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 // Misma anchura que gap + icono: el nombre queda centrado en la tarjeta sin contar el símbolo.
-                const SizedBox(width: 24),
+                const SizedBox(width: 20),
                 Text(
                   name,
-                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
                     fontWeight: FontWeight.w800,
                     color: Colors.black,
                     height: 1.15,
@@ -610,29 +608,29 @@ class _ProfileSummaryCard extends StatelessWidget {
                 ),
                 const SizedBox(width: 2),
                 Transform.translate(
-                  offset: const Offset(0, -4),
+                  offset: const Offset(0, -3),
                   child: Icon(
                     isMale ? Icons.male : Icons.female,
                     color: isMale
                         ? AppTheme.genderMaleBabyBlue
                         : AppTheme.genderFemalePink,
-                    size: 22,
+                    size: 19,
                   ),
                 ),
               ],
             ),
             if (ageLine != null) ...[
-              const SizedBox(height: 6),
+              const SizedBox(height: 4),
               Text(
                 ageLine,
-                style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
                   color: AppTheme.textLight,
-                  letterSpacing: 1.2,
+                  letterSpacing: 1.1,
                   fontWeight: FontWeight.w600,
                 ),
               ),
             ],
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
             Center(
               child: IntrinsicHeight(
                 child: Row(
@@ -646,26 +644,27 @@ class _ProfileSummaryCard extends StatelessWidget {
                           weightKg != null
                               ? '${weightKg!.toStringAsFixed(2)} kg'
                               : '—',
-                          style: Theme.of(context).textTheme.titleLarge
+                          style: Theme.of(context).textTheme.titleMedium
                               ?.copyWith(
                                 fontWeight: FontWeight.w700,
                                 color: AppTheme.palettePrimary,
                               ),
                         ),
-                        const SizedBox(height: 4),
+                        const SizedBox(height: 3),
                         Text(
                           'PESO',
                           style: Theme.of(context).textTheme.labelSmall
                               ?.copyWith(
                                 color: AppTheme.textLight,
-                                letterSpacing: 1.4,
+                                letterSpacing: 1.25,
                                 fontWeight: FontWeight.w600,
+                                fontSize: 10,
                               ),
                         ),
                       ],
                     ),
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 26),
+                      padding: const EdgeInsets.symmetric(horizontal: 18),
                       child: VerticalDivider(
                         width: 1,
                         thickness: 1,
@@ -679,20 +678,21 @@ class _ProfileSummaryCard extends StatelessWidget {
                           baby?.heightCm != null
                               ? '${baby!.heightCm == baby!.heightCm!.roundToDouble() ? baby!.heightCm!.round() : baby!.heightCm} cm'
                               : '—',
-                          style: Theme.of(context).textTheme.titleLarge
+                          style: Theme.of(context).textTheme.titleMedium
                               ?.copyWith(
                                 fontWeight: FontWeight.w700,
                                 color: AppTheme.palettePrimary,
                               ),
                         ),
-                        const SizedBox(height: 4),
+                        const SizedBox(height: 3),
                         Text(
                           'ALTURA',
                           style: Theme.of(context).textTheme.labelSmall
                               ?.copyWith(
                                 color: AppTheme.textLight,
-                                letterSpacing: 1.4,
+                                letterSpacing: 1.25,
                                 fontWeight: FontWeight.w600,
+                                fontSize: 10,
                               ),
                         ),
                       ],
@@ -731,14 +731,14 @@ class _LargeAvatarImage extends StatelessWidget {
           errorBuilder: (_, _, _) => Icon(
             isMale ? Icons.face : Icons.face_3,
             color: placeholderColor,
-            size: 48,
+            size: 40,
           ),
         );
       } catch (_) {
         return Icon(
           isMale ? Icons.face : Icons.face_3,
           color: placeholderColor,
-          size: 48,
+          size: 40,
         );
       }
     }
@@ -751,7 +751,7 @@ class _LargeAvatarImage extends StatelessWidget {
       errorBuilder: (_, _, _) => Icon(
         isMale ? Icons.face : Icons.face_3,
         color: placeholderColor,
-        size: 48,
+        size: 40,
       ),
     );
   }
@@ -1212,24 +1212,11 @@ class _ConsejoDelDiaCard extends StatelessWidget {
 
   const _ConsejoDelDiaCard({this.text});
 
-  (String title, String body) _splitTip(String raw) {
-    final dot = raw.indexOf('. ');
-    if (dot >= 12 && dot < raw.length - 8) {
-      return (raw.substring(0, dot + 1).trim(), raw.substring(dot + 2).trim());
-    }
-    final comma = raw.indexOf(', ');
-    if (comma >= 10 && comma < 48 && comma < raw.length - 10) {
-      return (raw.substring(0, comma).trim(), raw.substring(comma + 2).trim());
-    }
-    return ('Un detalle sobre tu bebé', raw);
-  }
-
   @override
   Widget build(BuildContext context) {
     final raw =
         text ??
         'Los bebés pueden reconocer la voz de su madre desde el útero. Hablarles con calma refuerza ese vínculo.';
-    final parts = _splitTip(raw);
 
     final cardColor = Color.lerp(AppTheme.paletteTertiary, Colors.white, 0.62)!;
     final iconColor = Color.lerp(
@@ -1254,31 +1241,20 @@ class _ConsejoDelDiaCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'CONSEJO DEL DÍA',
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: AppTheme.tipText.withValues(alpha: 0.78),
-                    letterSpacing: 1.3,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  parts.$1,
+                  'Consejo del día',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.w700,
                     color: AppTheme.tipText,
                   ),
                 ),
-                if (parts.$2.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    parts.$2,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: AppTheme.tipText,
-                      height: 1.45,
-                    ),
+                const SizedBox(height: 8),
+                Text(
+                  raw,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: AppTheme.tipText,
+                    height: 1.45,
                   ),
-                ],
+                ),
               ],
             ),
           ),
@@ -1387,7 +1363,7 @@ class _HomeCardsSkeletonState extends State<_HomeCardsSkeleton>
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _profileCard(rr),
-        const SizedBox(height: 24),
+        const SizedBox(height: 20),
         _resumenBlock(rr),
         const SizedBox(height: 20),
         _consejoCard(rr),
@@ -1405,7 +1381,7 @@ class _HomeCardsSkeletonState extends State<_HomeCardsSkeleton>
         animation: _shimmer,
         borderRadius: rr,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
+          padding: const EdgeInsets.fromLTRB(16, 18, 16, 16),
           child: Column(
             children: [
               Container(
@@ -1416,25 +1392,25 @@ class _HomeCardsSkeletonState extends State<_HomeCardsSkeleton>
                   color: _bar,
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
               Container(
-                height: 28,
-                width: 168,
+                height: 24,
+                width: 148,
                 decoration: BoxDecoration(
                   color: _bar,
                   borderRadius: BorderRadius.circular(8),
                 ),
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 8),
               Container(
-                height: 16,
-                width: 132,
+                height: 14,
+                width: 118,
                 decoration: BoxDecoration(
                   color: _bar,
                   borderRadius: BorderRadius.circular(6),
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
               Center(
                 child: IntrinsicHeight(
                   child: Row(
@@ -1443,7 +1419,7 @@ class _HomeCardsSkeletonState extends State<_HomeCardsSkeleton>
                     children: [
                       _statColumn(),
                       Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 26),
+                        padding: const EdgeInsets.symmetric(horizontal: 18),
                         child: VerticalDivider(
                           width: 1,
                           thickness: 1,
@@ -1467,17 +1443,17 @@ class _HomeCardsSkeletonState extends State<_HomeCardsSkeleton>
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Container(
-          height: 24,
-          width: 76,
+          height: 20,
+          width: 64,
           decoration: BoxDecoration(
             color: _bar,
             borderRadius: BorderRadius.circular(6),
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 6),
         Container(
-          height: 12,
-          width: 44,
+          height: 10,
+          width: 38,
           decoration: BoxDecoration(
             color: _bar,
             borderRadius: BorderRadius.circular(4),
@@ -1584,35 +1560,35 @@ class _HomeCardsSkeletonState extends State<_HomeCardsSkeleton>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Container(
-                      height: 14,
-                      width: 140,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.55),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Container(
-                      height: 18,
-                      width: double.infinity,
+                      height: 22,
+                      width: 168,
                       decoration: BoxDecoration(
                         color: Colors.white.withValues(alpha: 0.6),
                         borderRadius: BorderRadius.circular(6),
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 12),
                     Container(
-                      height: 18,
-                      width: 200,
+                      height: 16,
+                      width: double.infinity,
                       decoration: BoxDecoration(
                         color: Colors.white.withValues(alpha: 0.45),
-                        borderRadius: BorderRadius.circular(6),
+                        borderRadius: BorderRadius.circular(4),
                       ),
                     ),
                     const SizedBox(height: 8),
                     Container(
-                      height: 14,
+                      height: 16,
                       width: double.infinity,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.4),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      height: 16,
+                      width: 220,
                       decoration: BoxDecoration(
                         color: Colors.white.withValues(alpha: 0.35),
                         borderRadius: BorderRadius.circular(4),

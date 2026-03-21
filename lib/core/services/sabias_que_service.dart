@@ -1,25 +1,630 @@
-/// Servicio para obtener datos de "Sabías que...".
+/// Servicio para el texto de "Consejo del día" según la edad del bebé.
 /// Preparado para futuras fuentes (API, Firebase, etc.).
 abstract class SabiasQueService {
-  /// Obtiene el texto del dato curioso a mostrar.
-  /// Retorna null si no hay dato disponible.
-  Future<String?> getFact();
+  /// Consejo acorde a la semana de vida ([birthDate]) o un mensaje genérico si no hay fecha.
+  Future<String?> getFact({DateTime? birthDate});
 }
 
-/// Implementación por defecto con datos locales.
-/// Sustituir por implementación que consuma API/Firebase cuando esté disponible.
+/// Consejos orientativos por semana de vida (no sustituyen la opinión del pediatra).
 class SabiasQueServiceDefault implements SabiasQueService {
-  static const _defaultFacts = [
-    'Nació con 300 huesos, que luego se fusionarán a 206.',
-    'Los bebés pueden reconocer la voz de su madre desde el útero.',
-    'Un recién nacido duerme entre 16 y 17 horas al día.',
-    'Los bebés nacen sin rótulas; se desarrollan entre los 2 y 6 años.',
-    'El llanto de cada bebé tiene un patrón único.',
+  /// Días completos transcurridos desde el nacimiento (fecha local).
+  static int daysSinceBirth(DateTime birthDate) {
+    final birth = DateTime(birthDate.year, birthDate.month, birthDate.day);
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    var d = today.difference(birth).inDays;
+    if (d < 0) d = 0;
+    return d;
+  }
+
+  /// Semana de vida 1 = días 0–6 tras el nacimiento (fecha local).
+  static int weekOfLife(DateTime birthDate) => (daysSinceBirth(birthDate) ~/ 7) + 1;
+
+  /// Día 0–6 dentro de la semana de vida actual (cambia el consejo cada día).
+  static int dayIndexWithinLifeWeek(DateTime birthDate) => daysSinceBirth(birthDate) % 7;
+
+  /// Siete consejos por semana de vida (índice externo 0 = semana 1).
+  static const List<List<String>> tipsByWeekByDay = [
+    [
+      'Esta semana el bebé recuperará su peso de nacimiento. ¡Paciencia con las tomas nocturnas!',
+      'Las micciones y deposiciones frecuentes suelen ser buena señal de que come e hidrata bien.',
+      'Un amarilleo leve de la piel puede ser fisiológico; tu pediatra indica si hace falta revisión.',
+      'Duerme siempre boca arriba, en superficie firme, sin cojines ni peluches en la cuna.',
+      'Tomas cada 2–3 h son habituales; si duerme mucho pero gana peso, suele estar dentro de lo normal.',
+      'Luz y ruido suaves de día, más penumbra de noche, ayudan poco a poco a marcar el ritmo.',
+      'Acepta ayuda para comer o dormir tú: cuidarte también cuida al bebé.',
+    ],
+    [
+      'Es normal que el cordón umbilical se caiga estos días. Mantenlo seco y limpio.',
+      'Limpia solo con agua o lo que indique tu centro; evita tirones del cordón al cambiar el pañal.',
+      'Si el ombligo huele mal, está muy rojo o supura, consulta con urgencias o pediatría.',
+      'Los baños cortos están bien; seca bien el pliegue del ombligo con suavidad.',
+      'Pañal por debajo del cordón o doblado hacia abajo suele evitar roce y humedad.',
+      'La sangre seca en el ombligo puede asustar; ante duda, una foto al pediatra aclara si es esperable.',
+      'Las primeras sonrisas pueden ser reflejas; igual disfruta mirarle a los ojos con calma.',
+    ],
+    [
+      'Cuidado con los gases; los masajes en las piernas tipo «bicicleta» ayudan mucho.',
+      'Tras cada toma, mantenlo erguido unos minutos y pásale suavemente la espalda.',
+      'Burbujas en el biberón y un tetina adecuada reducen el aire que traga.',
+      'Si llora con piernas al vientre, puede aliviar presionar rodillas suaves hacia el pecho.',
+      'El llanto de cólico suele ser por la tarde-noche; rutina tranquila y contacto piel con piel ayudan.',
+      'Evita cambiar de leche o fórmula sin criterio médico: muchas veces el tiempo mejora los gases.',
+      'Paseos en carrito o portabebés calmante suelen funcionar cuando nada más «apaga» el llanto.',
+    ],
+    [
+      '¡Primer mes! El bebé empieza a enfocar mejor la vista a unos 20-30 cm.',
+      'Acerca el rostro al suyo al hablarle: es la distancia que mejor enfoca ahora.',
+      'Contraste alto (blanco y negro, caras grandes) capta más su atención que colores suaves.',
+      'Mueve un objeto lentamente: puede seguirlo un instante con la mirada.',
+      'La cabeza aún va con poco control; apoya siempre cuello y nuca al cogerlo.',
+      'Los brazos en posición de «defensa» o sobresalto al ruido son reflejos normales.',
+      'Celebra el hito del mes con calma: cada bebé marca su ritmo en sueño y tomas.',
+    ],
+    [
+      'El reflejo de prensión es fuerte; revisa que no haya hilos o pelos en sus manitos.',
+      'Quita anillos o pulseras tuyas al cambiarle para no engancharle dedos o cara.',
+      'Guantes suelen ser innecesarios y limitan el tacto; mejor uñas limas con cuidado.',
+      'No dejes cuerdas de persianas, cables o cordones de capucha a su alcance.',
+      'Si se enreda un pelo en un dedo o pene, es urgencia: quitar o ir a urgencias.',
+      'Ropa sin etiquetas que raspen y cremalleras lejos de la piel evitan llantos «sin causa».',
+      'El tiempo boca abajo corto y supervisado sigue siendo clave para el cuello.',
+    ],
+    [
+      'El llanto de final de tarde es frecuente: rutinas calmadas y contacto piel con piel suelen ayudar.',
+      'Baja luces y ruidos a partir de cierta hora; no hace falta silencio absoluto de día.',
+      'Un baño tibio antes de la última toma puede marcar «fin del día» sin ser obligatorio.',
+      'Cántale o tararea: tu voz es uno de los mejores calmantes que tiene.',
+      'Si estás muy agotado, es seguro dejarle un momento seguro en la cuna y respirar tú fuera.',
+      'Paseo en coche o sillita solo si puedes conducir con calma; no sustituye el descanso adulto.',
+      'Pedir ayuda no es fallar: el llanto intenso sostenido desgasta a cualquiera.',
+    ],
+    [
+      'Los estornudos frecuentes suelen ser normales; limpian las vías nasales del recién nacido.',
+      'Nariz pequeña se taponó con moco: suero fisiológico y aspirador suave si te lo enseñan.',
+      'No metas hisopos profundos en la nariz; solo el borde externo si hace falta limpiar.',
+      'Ronquidos leves al dormir pueden ser mucosidad; posición lateral supervisada a veces ayuda.',
+      'Fiebre en un bebé muy pequeño siempre merece valoración telefónica o presencial.',
+      'El aire seco de calefacción reseca mucosas; humedad moderada en la habitación puede ayudar.',
+      'Tabaco y humo pasivo irritan mucho las vías; el ambiente sin humo es prioridad.',
+    ],
+    [
+      'Vigila el ombligo ya curado y la zona del pañal para mantenerla seca.',
+      'Cambios frecuentes y crema barrera previenen irritación cuando la piel está sensible.',
+      'Airear el culito unos minutos tras el cambio seca la piel de forma natural.',
+      'Si el pañal marca rojez intensa con granitos, puede ser candidiasis: tu pediatra indica tratamiento.',
+      'Lava las manos antes y después del cambio para protegerle a él y a ti.',
+      'Bolsa de pañales cerrada y basura diaria reducen olor y gérmenes en el cambiador.',
+      'Si usas toallitas, elige sin alcohol fuerte si la piel reacciona con rojez.',
+    ],
+    [
+      'Empiezan a notarse breves periodos de vigilia más tranquilos entre tomas.',
+      'Aprovecha esos ratos despierto para miraros, hablar y jugar sin sobreestimular.',
+      'Demasiados colgantes móviles y luces a la vez pueden saturarle; menos es más.',
+      'Si bosteza o aparta la mirada, puede necesitar pausa: respeta señales de «basta».',
+      'Ventilar la habitación y temperatura cómoda favorecen sueño más reparador.',
+      'Evita pantallas cerca de su cara; el rostro humano sigue siendo el mejor estímulo.',
+      'Pequeñas rutinas («ahora cambio, ahora toma») le dan predictibilidad sin rigidez extrema.',
+    ],
+    [
+      'Tiempo boca abajo supervisado, aunque sean minutos, fortalece cuello y hombros.',
+      'Colócale sobre un cambiador firme o manta en el suelo, siempre vigilado.',
+      'Un espejo seguro bajo su cara motiva levantar un poco la cabeza.',
+      'No lo hagas justo tras comer: espera un poco para reducir reflujo y malestar.',
+      'Si protesta al principio, empieza con 1–2 minutos y alarga poco a poco.',
+      'Varía el lugar de la casa para que mire distintos contrastes y sonidos leves.',
+      'Nunca boca abajo para dormir; solo vigilia y con adulto presente.',
+    ],
+    [
+      'Abre más las manos; es buen momento para ofrecerle objetos suaves y ligeros de agarrar.',
+      'Sonajeros ligeros o mordedores de textura distinta estimulan tacto y boca.',
+      'Cuando suelte el objeto, vuelve a dárselo: aprende causa-efecto muy pronto.',
+      'Lávate manos antes de jugar si ha estado en sitios públicos o mascotas cerca.',
+      'Juguetes sin piezas pequeñas desprendibles: todo va a la boca a esta edad.',
+      'Anilla o mordedor refrigerado (no congelado) puede calmar encías si empieza molestia.',
+      'Rotar pocos juguetes cada semana mantiene el interés sin necesidad de comprar más.',
+    ],
+    [
+      'Cerca del tercer mes, muchos bebés sonríen a caras familiares.',
+      'Imita sus sonrisas y sonidos: refuerza el «diálogo» aunque aún no haya palabras.',
+      'Las caras nuevas pueden asustarle un poco: presenta visitas con calma y sin forzar abrazos.',
+      'Fotos y vídeos con flash directo pueden molestar; luz natural o indirecta es mejor.',
+      'Si no sonríe socialmente aún, hay rango amplio de normalidad; la revisión del pediatra lo orienta.',
+      'El porteo ergonómico acerca tu rostro y calma; revisa postura de caderas y vías aéreas.',
+      'Canta canciones repetitivas: le gusta anticipar el final y participar con vocalizaciones.',
+    ],
+    [
+      'Los sonidos guturales y las vocalizaciones empiezan a mezclarse con el llanto.',
+      'Responde cuando «habla»: le enseñas que su voz tiene respuesta.',
+      'Silencios cortos tras tu frase le dan turno para contestar con sonidos.',
+      'Evita televisor de fondo constante: dificulta enfocarse en el lenguaje humano.',
+      'Libros con una imagen grande por página son ideales para mirar juntos.',
+      'Si hay más idiomas en casa, usar ambos con naturalidad suele ser positivo.',
+      'Los arrullos y el ritmo de la voz calmante regulan su sistema nervioso.',
+    ],
+    [
+      'El cuello sostiene mejor la cabeza al cogerlo con apoyo bajo los brazos.',
+      'Mantén siempre una mano en la nuca al levantarlo del baño o cambiador.',
+      'En brazos, alterna brazos para no cargar siempre el mismo hombro.',
+      'Si usa grupo 0 en coche, comprueba que el arnés no roce el cuello.',
+      'El portabebés debe dejar vía aérea libre siempre: barbilla separada del pecho.',
+      'Juegos de «avioncito» suaves solo si el cuello lo tolera y sin sacudidas.',
+      'Cada bebé gana control del cuello en fechas distintas; no compares con primos o apps.',
+    ],
+    [
+      'Puede seguir objetos con la mirada un poco más lejos que antes.',
+      'Mueve un móvil o juguete lentamente de lado a lado a la altura de su vista.',
+      'Colores vivos a media distancia captan más atención que detalles muy pequeños.',
+      'Si parece bizquear siempre hacia dentro, coméntalo en la revisión; a veces es pasajero.',
+      'La luz natural indirecta es mejor para jugar que focos muy potentes encima.',
+      'Cambiar de habitación para el juego ofrece estímulos visuales nuevos.',
+      'Protege ojos del sol directo con sombrilla o sombrero en el cochecito.',
+    ],
+    [
+      'Algunos duermen tramos algo más largos de noche; el ritmo sigue siendo muy variable.',
+      'No hay «premio» por dormir toda la noche pronto; cada familia es distinta.',
+      'Rutina corta antes de dormir (pijama, canción) marca el cambio de día a noche.',
+      'Si despierta, toma mínima de luz y voz para no activarle del todo.',
+      'Evita relojes en la habitación del adulto si obsesiona mirar cada despertar.',
+      'Sueño fragmentado es fisiológico; descansar cuando él duerma de día ayuda a los cuidadores.',
+      'Nunca dormir en sofá con el bebé: riesgo de caída y postura insegura.',
+    ],
+    [
+      'Mirará con fijeza sus propios puños cuando los junta frente al pecho.',
+      'Observa si abre la mano para coger algo que le acercas: coordinación ojo-mano en marcha.',
+      'Anillas de tela o mordedores fáciles de agarrar motivan a soltar y volver a coger.',
+      'No fuerces a abrir el puño; con el tiempo lo hará solo con más frecuencia.',
+      'Uñas cortas limadas reducen arañazos accidentales en su cara y la tuya.',
+      'Si lleva manoplas, asegúrate de que no queden hilos sueltos dentro.',
+      'Jugar con sus pies cantando «cosquillas» refuerza cuerpo y vínculo.',
+    ],
+    [
+      'Durante la toma, mantén el cuello alineado para que trague con comodidad.',
+      'En biberón, el tetina llena de leche reduce tragar aire; ángulo casi horizontal suele ir bien.',
+      'En lactancia, cambia de pecho cuando se relaje el ritmo de succión eficaz.',
+      'Eructar no siempre sale; si está tranquilo tras la toma, no insistas sin fin.',
+      'Reflujo leve en forma de regurgitación es frecuente; posición semierecta un rato puede ayudar.',
+      'Si el bebé tose o se atraganta, valora curso de primeros auxilios pediátricos.',
+      'Hidratación de quien amamanta: beber agua y comer con regularidad te sostiene a ti también.',
+    ],
+    [
+      'El baño diario no es imprescindible; si la piel está bien, unas pocas veces por semana puede bastar.',
+      'Agua tibia, rápida y con todo preparado antes evita enfriamientos.',
+      'Crema hidratante sin perfume fuerte tras el baño ayuda si la piel tiende a secarse.',
+      'Pliegues del cuello y muslos: secar bien evita rozaduras húmedas.',
+      'Champú una o dos veces por semana suele bastar salvo indicación contraria.',
+      'Nunca solo en bañera ni cubeta: un segundo de distracción basta.',
+      'Si odia el baño, prueba envolverle el vientre con paño mojado tibio encima del agua.',
+    ],
+    [
+      'Las pataditas en el cambiador preparan el control motor; déjale mover las piernas con libertad.',
+      'Quita calcetines apretados si le marcan el tobillo; circulación y comodidad primero.',
+      'Gimnasio de suelo con arco seguro puede entretenerle unos minutos supervisado.',
+      'Evita saltadores de puerta si tu pediatría no los recomienda: hay riesgo de desarrollo de cadera.',
+      'Masaje suave en muslos y pantorrillas relaja antes de dormir.',
+      'Si lleva mucho tiempo en capazo, cambia de posición y estimulación en brazos o suelo.',
+      'Rodillas al pecho suavemente, como si pedaleara, sigue ayudando con gases.',
+    ],
+    [
+      'Chupar el puño o los dedos para calmarse es muy habitual a esta edad.',
+      'Chupete si lo usáis: higiene y tamaño adecuado; no lo endulces ni lo cuelgues del cuello.',
+      'Si amamantas, introducir chupete muy pronto puede interferir; cada caso es distinto.',
+      'Lávate el chupete que se cae al suelo según criterio sensato (agua, no lengua).',
+      'No sustituyas tomas de hambre por chupete: primero comprobar si tiene hambre.',
+      'Dientes que asoman: retirar chupete progresivamente será tema más adelante.',
+      'Mordisquear manos también puede ser dentición; ofrece texturas seguras y frías.',
+    ],
+    [
+      'Una rutina de sueño previsible (sin rigidez extrema) suele ayudar a toda la familia.',
+      'Misma habitación los primeros meses es recomendación de muchas guías; elige lo que encaje en casa.',
+      'Si co-dormís, informa riesgos (ropa ligera, sin edredón encima, sin alcohol ni fármacos sedantes).',
+      'Monitor con cable fuera de su alcance; nada colgando dentro de la cuna.',
+      'Temperatura ambiente cómoda y ropa en capas mejor que mucha manta.',
+      'Si un día la rutina se rompe por visita o viaje, no pasa nada: se retoma al día siguiente.',
+      'Duerme cuando puedas: el descanso adulto reduce errores y tensión.',
+    ],
+    [
+      'Hablarle mirándole a los ojos refuerza el vínculo y estimula el lenguaje.',
+      'Descríbele lo que haces («ahora te cambio»): asocia palabras con acciones.',
+      'Canta la misma canción al despertar: le da ancla emocional al día.',
+      'Limita el móvil cerca de su cara; tu cara es el estímulo social número uno.',
+      'Si hay hermanos, involúcralos en juegos suaves y supervisados con el bebé.',
+      'Papá u otro cuidador con tiempo a solas con él refuerza vínculos múltiples.',
+      'El contacto visual mutuo libera oxitocina: beneficia a bebé y adulto.',
+    ],
+    [
+      'Hacia el cuarto mes, algunos empiezan a rodar de un lado; no lo dejes solo en superficies altas.',
+      'Cambiador: una mano siempre sobre él aunque «solo sea un segundo».',
+      'Suelo blandito pero firme para practicar vuelta; quita objetos peligrosos alrededor.',
+      'Cuna con barandillas altas y colchón ajustado: no debe quedar hueco lateral.',
+      'Ventanas con persianas recogidas y sin cuerdas a su alcance.',
+      'Si rueda hacia el estómago y protesta, ayúdale a volver hasta que aprenda solo.',
+      'Arnés de trona solo cuando el tronco lo sostenga bien según instrucciones del fabricante.',
+    ],
+    [
+      'Evita almohadas, rellenos o juguetes blandos en la cuna: superficie firme y espacio despejado.',
+      'Saco de dormir adecuado a la Tª suele ser más seguro que mantas sueltas.',
+      'Posición boca arriba siempre para dormir hasta el año salvo indicación médica.',
+      'No fumes nunca en la habitación donde duerme; el humo se deposita en tejidos.',
+      'Colchón protector de orina bajo la sábana ajustada, no suelto encima del bebé.',
+      'Si usa chupete para dormir, ofrece varios iguales por la noche por si cae uno.',
+      'Revisa que no haya cortinas o estanterías inestables cerca de la cuna al empezar a ponerse de pie.',
+    ],
+    [
+      'Si mastica las manos y babea más, puede ser el inicio de la dentición; mordedores fríos suelen aliviar.',
+      'Anillo refrigerado (nevera, no congelador) calma encías; vigila que no se desgaste en trozos.',
+      'Masaje muy suave con dedo limpio sobre la encía a veces alivia un rato.',
+      'Ibuprofeno o paracetamol solo si el pediatra lo indica por molestia o fiebre.',
+      'Collares de ámbar: no hay evidencia clara y hay riesgo de estrangulación; mejor evitarlos.',
+      'Brotes dentales pueden alterar el sueño unos días; paciencia y consuelo.',
+      'Cepillo de dientes suave en cuanto asoma el diente, sin pasta o cantidad mínima según edad.',
+    ],
+    [
+      'Ríe y vocaliza en respuesta a juegos sencillos; tu tono alegre lo estimula.',
+      '«Cucú-tras» con paño sobre la cara enseña que las cosas siguen existiendo al taparlas.',
+      'Soplar raspberries en la barriga suele provocar carcajadas si le gusta el contacto.',
+      'Si se sobresalta con risas fuertes, baja un poco el volumen emocional.',
+      'Música suave de fondo está bien; evita volumen alto sostenido.',
+      'Salir al parque: árboles, sombras y gente pasando son estímulo natural.',
+      'Limita tiempo en hamaca o silla: el suelo libre desarrolla más músculos.',
+    ],
+    [
+      'Alterna turnos en el «diálogo»: tú hablas, espera un poco, él balbucea.',
+      'Repite los sonidos que hace él: se siente escuchado y copia entonación.',
+      'Evita corregirle «no se dice así»; a esta edad imitar y expandir es mejor.',
+      'Cuentos con sonidos onomatopéyicos (animales, coches) enganchan la atención.',
+      'Si hay sobreflujo de pantallas en adultos cerca, él mira: prioriza mirarle a él.',
+      'Silbidos y labios vibrados enseñan movimientos bucales nuevos.',
+      'Gritarle desde lejos confunde; acércate a la vista para hablarle.',
+    ],
+    [
+      'Juguetes que suenan suave al moverlos suelen captar bien su atención.',
+      'Caja de objetos seguros de la casa (cucharas de madera, paños) estimula sin gastar mucho.',
+      'Evita sonajeros muy estridentes a corta distancia del oído.',
+      'Golpear cajas vacías con palo suave explora causa-sonido (supervisado).',
+      'Música en vivo (tararear, palmadas) conecta más que vídeos musicales.',
+      'Si se aburre pronto, cambia de juguete o de postura, no de estímulo continuo fuerte.',
+      'Recoger juguetes al final del día evita tropiezos y enseña orden más adelante.',
+    ],
+    [
+      'La leche (materna o preparado) sigue siendo la base; no hay prisa por los sólidos.',
+      'Agua a pequeños sorbos en vaso abierto puede empezar a explorarse con ayuda.',
+      'No miel antes del año por riesgo de botulismo infantil.',
+      'Sal y azúcar añadidos no hacen falta en su dieta temprana.',
+      'Si alguien insiste en «darle de probar», defiende con calma lo que indique tu pediatra.',
+      'Crecimiento en curva estable importa más que un día con pocas tomas.',
+      'Vitaminas u otros suplementos solo si hay prescripción.',
+    ],
+    [
+      'Media vuelta y mini-desplazamientos pueden empezar; revisa enchufes y estabilidad de muebles.',
+      'Protectores de enchufe y muebles anclados a pared si hay tirones futuros.',
+      'Plantas tóxicas, productos de limpieza y medicinas fuera de alcance y cerrados.',
+      'Puertas de escalera cuando empiece a moverse más; mejor antes que después.',
+      'Pequeños objetos en el suelo (monedas, pilas) son riesgo de aspiración.',
+      'Barandillas de cama cuando intente escalar: mejor bajar colchón antes.',
+      'Nunca dejar bolsa de plástico o globos deshinchados a su alcance.',
+    ],
+    [
+      'Puede mostrar más recelo con desconocidos; suele ir ligado a un apego saludable.',
+      'Presenta gente nueva desde tu regazo sin forzar que le cojan en brazos.',
+      'Respeta si gira la cabeza: es su forma de decir «necesito pausa».',
+      'Los abuelos pueden sentirse rechazados; explícale que es una fase, no personal.',
+      'Mantén rutina de sueño en visitas largas para no acumular cansancio.',
+      'Si llora al dejarle en guardería nueva, despedidas breves y confianza en los cuidadores ayudan.',
+      'Foto de familia en el lugar donde duerme fuera de casa puede dar seguridad.',
+    ],
+    [
+      'Ofrece texturas seguras (paño suave, sonajero) para estimular el tacto.',
+      'Arena o pasta de modelar (edad segura) más adelante; ahora basta texturas lavables.',
+      'Agua tibia en bandeja con vasos y cucharas bajo supervisión explora líquidos.',
+      'Evita pegamentos o pinturas no infantiles en manos que van a la boca.',
+      'Texturas en libros de tela o gomaespuma son ideales para manipular.',
+      'Descalzo en alfombra o césped (si es seguro) da feedback tátil a los pies.',
+      'Si tiene piel atópica, nuevas cremas o tejidos: prueba en zona pequeña primero.',
+    ],
+    [
+      'Duplicar el peso al nacer es un hito orientativo hacia los 4-5 meses; tu pediatra mira la curva.',
+      'No pesa en casa cada día: las fluctuiones diarias pueden angustiar sin aportar.',
+      'Misma báscula y misma ropa/hora aproximada si controlas tendencia en casa.',
+      'El percentil estable en su línea suele ser más importante que un número suelto.',
+      'Si amamantas y no ves cuánto toma, pañales húmedos y ganancia en controles tranquilizan.',
+      'Crecimiento no lineal: a veces semanas de poco apetito y luego repunte.',
+      'Alimentación forzada no engorda mejor: respeta saciedad salvo indicación médica.',
+    ],
+    [
+      'Mirarse en el espejo suele fascinarles en esta etapa.',
+      'Señala su reflejo y el tuyo: «¿quién es ese?» construye autoconciencia poco a poco.',
+      'Espejo acrílico seguro para bebés evita roturas si lo golpea.',
+      'No necesita espejo caro: uno de mano basta para jugar un rato.',
+      'Si se asusta al verse, quítalo unos días y vuelve a intentar más tarde.',
+      'Fotos de familia en álbum también refuerzan caras conocidas.',
+      'Evita filtros de cara raros en pantalla cerca: puede confundir estímulos.',
+    ],
+    [
+      'La alimentación complementaria suele plantearse hacia el sexto mes según indicación profesional.',
+      'Señales de preparación: sostener cabeza, interés por la comida, pérdida del reflejo de extrusión.',
+      'Empezar no es obligatorio el día 180 exacto: rango semanas según bebé y pediatra.',
+      'Hierro en la dieta al iniciar sólidos suele ser tema clave; te lo orientan en consulta.',
+      'No introducir todo en un día: calma y un alimento a la vez al principio.',
+      'Silla alta con arnés y tabla a la altura del pecho reduce riesgo de atragantamiento.',
+      'Primeras papillas muy líquidas; textura va espesando con el tiempo.',
+    ],
+    [
+      'Al introducir sólidos, una textura o ingrediente nuevo cada pocos días facilita detectar alergias.',
+      'Alergenos comunes (huevo, cacahuete, pescado) a veces se introducen pronto con plan médico.',
+      'Observa erupción, vómitos, hinchazón o dificultad respiratoria: urgencia si respiración afectada.',
+      'Llevar diario de alimentos nuevos ayuda al pediatra si hay reacción dudosa.',
+      'No dejes solo con finger foods hasta que el pinzamiento y sentarse sean seguros.',
+      'Trozos redondos duros (uvas, salchichas) son alto riesgo: cortar longitudinalmente y muy pequeño.',
+      'Agua con las comidas; la leche sigue siendo gran parte de calorías al inicio.',
+    ],
+    [
+      'Sentado con apoyo (en tu regazo o asiento adecuado) amplía el juego y la observación.',
+      'Tronas que reclinan demasiado no sustituyen práctica en suelo para motor.',
+      'Tiempo máximo en contenedor (silla, capazo) recomendado suele ser limitado en guías.',
+      'Si se cae de lado sentado, suelen ser caídas bajas; vigila superficie y objetos duros cerca.',
+      'Juguetes a la altura del pecho motivan alargar brazos y coger.',
+      'No uses andadores con ruedas de suelo si tu pediatría desaconseja riesgos.',
+      'Si gatea y se sienta alternando, es transición normal del motor.',
+    ],
+    [
+      'Empieza a pasar objetos de una mano a otra: coordinación en desarrollo.',
+      'Dos sonajeros, uno en cada mano, y luego intercambio voluntario para practicar.',
+      'Bloques blandos apilables (y derribarlos) enseña causa-efecto divertida.',
+      'Piezas pequeñas de juegos de hermanos mayores fuera de su alcance.',
+      'Torres de vasos apilables en baño estimulan sin riesgo de golpe duro.',
+      'Si suelta todo al suelo para que se lo des, está jugando a «causa-efecto social».',
+      'Felicita el esfuerzo, no solo el resultado: refuerza intentar.',
+    ],
+    [
+      'Balbuceos repetidos son paso previo al habla; imítalos y responde con calma.',
+      'Amplía: si dice «ba», responde «baba» o «ballena» sin exigir repetición.',
+      'Evita pantalla como «babysitter» frecuente: menos conversación cara a cara.',
+      'Canciones con gestos («las ruedas del autobús») enlazan movimiento y palabra.',
+      'Si hay preocupación por audición (no voltea al sonido), pedir prueba o revisión.',
+      'Silencios sin culpa: el aburrimiento moderado favorece iniciativa y juego.',
+      'Varios adultos que le hablen le enriquecen modelos de lenguaje.',
+    ],
+    [
+      'Gateo o arrastre: cada bebé tiene estilo; lo importante es que explore moviéndose.',
+      'Rodillas protegidas en alfombra si raspa mucho; evita rodilleras apretadas.',
+      'Escaleras y umbrales: puertas o rejas antes del primer susto.',
+      'Si «comando» gateando hacia enchufes, redirige y ofrece zona sí segura.',
+      'Gatear descalzo fortalece arco plantar y equilibrio.',
+      'Algunos se saltan el gateo y andan después; suele ser variación aceptable si el resto evoluciona.',
+      'Juegos de perseguir por el suelo refuerzan movimiento y risas.',
+    ],
+    [
+      'Muchos se mantienen sentados unos segundos; si practica, rodea de superficie segura por si se va de lado.',
+      'Cojines blandos alrededor en el suelo amortiguan caídas laterales.',
+      'No dejar en borde de cama o sofá aunque «ya se siente bien».',
+      'Pelota grande para abrazar puede ayudar a mantener equilibrio sentado.',
+      'Si se resbala, no gritar de susto: tranquilizar para que no asocie miedo al intento.',
+      'Fortalecer torso con tiempo boca abajo y rodillas sigue siendo útil.',
+      'Silla de paseo reclinada si aún se cae de lado al ponerse sentado en ella.',
+    ],
+    [
+      'La «pinza» aún es tosca: cogerá trozos con toda la mano cuando toque en la dieta.',
+      'Trozos en forma de bastón (aguacate, plátano) son fáciles de palmar.',
+      'Evita uva entera, frutos secos enteros y trozos de manzana dura sin cocinar.',
+      'Sentado erguido, atento, y adulto presente: las «tres reglas» del baby-led weaning seguro.',
+      'Tozón o arcadas con trozo nuevo pueden ser aprendizaje; saber diferenciar atragantamiento grave.',
+      'Curso de primeros auxilios infantiles da mucha tranquilidad a quien da de comer.',
+      'Babero amplio o camiseta vieja tuya: el aprendizaje es sucio y normal.',
+    ],
+    [
+      'La ansiedad ante separaciones breves puede marcar; despedidas cortas y serenas suelen ayudar.',
+      'Juego de «adiós-vuelvo» desde otra habitación en segundos entrena que regresas.',
+      'Objeto transicional (pañuelo, peluche seguro de sueño si aplica) puede ayudar más adelante.',
+      'No escaparte sin decir nada: puede aumentar miedo a que desaparezcas.',
+      'Cuidador estable en guardería facilita apego secundario saludable.',
+      'Si lloras al dejarle, él lo nota: respira y transmite seguridad con voz firme.',
+      'Las despedidas en guardería suelen acortarse con el tiempo cuando confía en el lugar.',
+    ],
+    [
+      'Entiende el tono de voz y gestos antes que muchas palabras sueltas.',
+      'Sonrisa + voz suave refuerza lo que quieres que repita; voz seria marca límite.',
+      'Señalar mientras nombras («mira, el perro») enseña vocabulario receptivo.',
+      'Evita negaciones largas; una instrucción corta y clara funciona mejor.',
+      'Imitar gestos de «no» con cabeza puede aparecer antes que decir la palabra.',
+      'Si hay dos lenguas, usar ambas con naturalidad no retrasa el habla en la mayoría.',
+      'Cuentos con imágenes grandes y una frase por página mantienen atención.',
+    ],
+    [
+      'Busca objetos aunque los tapes un poco: la memoria del objeto va madurando.',
+      'Juega a esconder el sonajero bajo paño y descúbrelo juntos.',
+      'Cajas anidadas y tapas que quitar enseñan permanencia y motricidad fina.',
+      'Si frustra no encontrar, ayúdale un poco para que no abandone el juego.',
+      'Ordenar no es prioridad; explorar cajones seguros bajo supervisión sí.',
+      'Espejo bajo juguete escondido combina dos juegos de permanencia.',
+      'Puzzle muy simple de encajar grande es siguiente paso cuando esté listo.',
+    ],
+    [
+      'Entre el décimo y duodécimo mes pueden aparecer primeras palabras; hay mucha variación normal.',
+      '«Mama» y «papa» a veces son sonido antes que etiqueta personal; igual celebra.',
+      'Si solo señala y no dice nada aún, puede ser gestor antes que hablador.',
+      'Repetir la palabra correcta sin presionar («sí, eso es la pelota»).',
+      'Pantalla con «aprender palabras» no sustituye interacción humana diaria.',
+      'Oído revisado si no reacciona a sonidos suaves o no voltea al nombre.',
+      'Hermanos que hablan por él: animar a esperar un segundo a que intente.',
+    ],
+    [
+      'Puede ponerse de pie agarrándose a los muebles; revisa esquinas y que no haya riesgo de vuelco.',
+      'Mesas auxiliares inestables lejos de su recorrido de cruje.',
+      'Zapatos flexibles solo para salir; en casa descalzo o calcetines antideslizantes.',
+      'Puerta a escalera cerrada siempre; un segundo basta para subir.',
+      'Ventanas con limitador de apertura o rejas si hay riesgo de acceso.',
+      'Si cruza el salón de mueble en mueble, celebra el logro motor con espacio seguro.',
+      'Andador de empuje estable mejor que andador cerrado con ruedas si lo usáis.',
+    ],
+    [
+      'Poco a poco puede probar sorbo en vaso o taza de aprendizaje junto a sus tomas habituales.',
+      'Agua en vaso abierto ensucia pero enseña; empezar con cantidades pequeñas.',
+      'Biberón solo leche; zumos azucarados no hacen falta en la infancia temprana.',
+      'Cepillar dientes tras última toma nocturna de leche si ya hay dientes.',
+      'Transición de biberón a vaso puede ser larga; constancia sin batalla.',
+      'Si tira el vaso, ofrécelo de nuevo con calma (es experimento, no desafío).',
+      'Teteras antiderrame ayudan al principio; luego vaso normal.',
+    ],
+    [
+      'Imita gestos sencillos (aplausos, besos en el aire) si se los enseñas con paciencia.',
+      '«Choca esos cinco» y «adiós con la mano» son hitos sociales divertidos.',
+      'Videos de adultos enseñando gestos no sustituyen practicar frente a frente.',
+      'Si no imita aún, demuestra muchas veces sin exigir respuesta inmediata.',
+      'Bailes con movimientos repetidos (cabeza, hombros) enlazan ritmo y cuerpo.',
+      'Señalar con índice suele aparecer: nombra lo que señala para darle palabra.',
+      'Juegos de turnos (tú pones bloque, él pone bloque) enseñan reciprocidad.',
+    ],
+    [
+      'Hacia el año, algunos dan pasos apoyados o ya caminan; calzado flexible cuando salga a caminar fuera.',
+      'En casa descalzo fortalece tobillos y arco plantar mientras aprende.',
+      'Primeros pasos torpes y caídas frecuentes son normales; protege cabeza en muebles punzantes.',
+      'No compares con el bebé del vecino: el rango de edad al caminar es amplio.',
+      'Si camina de puntillas todo el tiempo o solo un lado, coméntalo en revisión.',
+      'Parque o corralito ya no contiene si escala: toca adaptar la casa.',
+      'Celebrar el primer paso sin sobreactuar a veces evita que se asuste y deje de intentar.',
+    ],
+    [
+      'La dieta y el sueño se parecen más a los del niño pequeño; cada familia encuentra su ritmo con apoyo pediátrico.',
+      'Una siesta puede desaparecer antes que la otra; flexibilidad según cansancio.',
+      'Comida familiar troceada refuerza modelos saludables si los adultos comen variado.',
+      'Límites claros en pantalla antes de que pida tablet a cada rato.',
+      'Cepillado de dientes dos veces al día con pasta de flúor según edad.',
+      'Seguridad en coche: silla a contramarcha el tiempo que marque normativa y talla.',
+      'Última revisión del primer año: buen momento para vacunas pendientes y dudas acumuladas.',
+    ],
   ];
 
+  /// Tras la semana 52: grupos de 7 consejos que rotan por semana y por día.
+  static const List<List<String>> tipsAfterFirstYearByWeekByDay = [
+    [
+      'Más de un año: refuerza límites claros y cariñosos; entiende más de lo que parece.',
+      'Explica en frases cortas el porqué de un «no» cuando sea posible.',
+      'Ofrece dos opciones válidas («¿pijama azul o verde?») para practicar autonomía.',
+      'Rabietas son normales a veces: mantén calma, nombre emociones y límites seguros.',
+      'Tiempo a solas de juego libre sin dirigir cada minuto favorece creatividad.',
+      'Salidas al parque diarias si puedes: gasto de energía mejora sueño y humor.',
+      'Revisa que cunas y barandillas sigan siendo seguras si ya trepa bien.',
+    ],
+    [
+      'Juego simbólico (cocinar, cuidar muñecos) explota en el segundo año; acompaña sin dirigir todo.',
+      'Objetos cotidianos seguros (olla, cuchara) valen más que juguetes con mil luces.',
+      'Imita su juego un rato y luego deja que él lidere la escena.',
+      'Roles de «papá/mamá» con muñecos procesan lo que ve en casa.',
+      'Limita juguetes visibles a unos pocos; rotar cajas mantiene interés.',
+      'Juego paralelo con otro niño es habitual antes del juego cooperativo.',
+      'No riñas por «mal uso» del juguete si no hay peligro: experimenta.',
+    ],
+    [
+      'Frases de dos palabras suelen llegar entre 18 y 24 meses; si dudas, consulta con tu pediatra.',
+      'Expande lo que dice: «sí, el coche rojo» en lugar de solo «sí».',
+      'Evita preguntas de examen («¿cómo se dice?»); mejor narrar y esperar.',
+      'Canciones con gestos siguen siendo oro para vocabulario y memoria.',
+      'Si entiende mucho pero habla poco, puede ser perfil «late talker» a valorar.',
+      'Audiometría si hay antecedentes o dudas de escucha.',
+      'Lectura diaria, aunque sean 5 minutos, suma muchísimo.',
+    ],
+    [
+      'Cae y se levanta al aprender a caminar; protege esquinas y vigila escaleras.',
+      'Casco no hace falta en casa; sí vigilar muebles de cristal y fuego.',
+      'Puerta de cocina o cajones con productos bloqueados.',
+      'Patio o balcón: rejas y puertas que no pueda abrir solo.',
+      'Piscinas, barreños y cubetas: vaciar y cercar; riesgo de ahogamiento en pocos cm.',
+      'En parque, ayuda en alturas hasta que coordine bien subida y bajada.',
+      'Zapatos que no resbalen en suelos mojados cuando ya corre.',
+    ],
+    [
+      'Autonomía en comer (dedos, cuchara) ensucia pero aprende; ofrece porciones pequeñas y seguras.',
+      'Sentarse a comer con la familia modela comportamiento más que sermones.',
+      'No uses comida como castigo o premio constante; puede torcer la relación con la comida.',
+      'Agua como bebida principal; evita refrescos azucarados habituales.',
+      'Fruta troceada y verdura cocida en bastones siguen siendo buen formato.',
+      'Si rechaza un alimento, ofrécelo otro día sin drama.',
+      'Alergias: si ya están introducidos, mantén variedad según tolerancia.',
+    ],
+    [
+      'Rutina de sueño estable ayuda; los despertares nocturnos pueden volver en cambios o saltos de desarrollo.',
+      'Cambio de cuna a cama: cuando trepe o pida más espacio, con barandilla de transición.',
+      'Miedos nocturnos pueden empezar más adelante; luz tenue y presencia breve tranquiliza.',
+      'Higiene del sueño: mismo orden, hora similar, habitación fresca y oscura.',
+      'Si snorea mucho o para la respiración, comentar en pediatría.',
+      'Transición de siesta: algunos dejan de dormirla entre 3 y 5 años; señales de cansancio guían.',
+      'Pantallas lejos de la hora previa a dormir mejoran calidad de sueño.',
+    ],
+    [
+      'Lectura diaria, aunque sea breve, potencia vocabulario y concentración.',
+      'Deja que elija un libro aunque sea el mismo 20 veces: repeticiones aprenden.',
+      'Señala imágenes y espera que él diga o señale algo.',
+      'Biblioteca infantil es recurso gratis y rutina bonita de salida.',
+      'Evita libro + pantalla a la vez: un estímulo a la vez al principio.',
+      'Historios cortos antes de dormir cierran el día con calma.',
+      'Si mastica libros de cartón, ofrece tela o plástico grueso hasta que pase la fase.',
+    ],
+    [
+      'Socializar en parque o grupo pequeño enseña turnos y paciencia.',
+      'No fuerces compartir todo al segundo: a esta edad el «mío» es típico.',
+      'Modela compartir con él delante de otros niños.',
+      'Si pega o muerde, quitar con calma y explicar «duele»; coherencia entre cuidadores.',
+      'Cumpleaños: pocos regalos y tiempo de juego libre a menudo funciona mejor que fiesta larguísima.',
+      'Lavarse manos al entrar de parque o guardería reduce resfriados en racha.',
+      'Vacunas al día según calendario: protección colectiva y personal.',
+    ],
+    [
+      'Cepillado de dientes con pasta de flúor en cantidad adecuada a la edad según recomendación profesional.',
+      'Ayuda a cepillar hasta los 6-8 años aunque «él solo quiera»: supervisión real.',
+      'Visita al dentista infantil cuando tengan dientes o a la edad que indiquen.',
+      'Chupete o dedo: si afecta paladar o dientes, plan gradual con pediatría/odontología.',
+      'Limitar chucherías pegajosas entre horas reduce caries.',
+      'Agua después de comidas ayuda a limpiar si no hay cepillo a mano.',
+      'Si choca un diente, guardia o dentista según urgencia.',
+    ],
+    [
+      'Pantallas: menos es más a esta edad; el juego activo y el lenguaje cara a cara son prioridad.',
+      'Si hay pantalla, contenido lento y compartido contigo, no solo en solitario.',
+      'Evita vídeos rápidos hipereditados como fondo constante.',
+      'Modelo adulto: móvil boca abajo en comidas familiares cuando se pueda.',
+      'Tiempo máximo recomendado según guías pediátricas; mejor calidad que cantidad.',
+      'Dormir sin tablet ni TV en la habitación.',
+      'Apps «educativas» no sustituyen bloques, libros y parque.',
+    ],
+    [
+      'Hacia los 2 años, frases más largas y preguntas constantes: responde con calma y vocabulario sencillo.',
+      '«Por qué» infinito: respuestas breves y honestas al nivel que entienda.',
+      'Si no sabes, «vamos a mirarlo en un libro» enseña curiosidad sana.',
+      'Corregir pronunciación sin hacer sentir mal: repite bien de forma natural.',
+      'Cuentos con emociones ayudan a nombrar miedo, enfado o alegría.',
+      'Juego al aire libre diario si el clima lo permite.',
+      'Límites iguales entre cuidadores reducen pruebas de límites.',
+    ],
+    [
+      'Cada niño tiene su calendario; las visitas al pediatra sirven para resolver dudas concretas.',
+      'Llevar lista de preguntas a la revisión evita olvidar lo importante.',
+      'Vacunas y controles: anota fechas en calendario familiar.',
+      'Si algo te preocupa de verdad, no esperes a la siguiente revisión: llama antes.',
+      'Desarrollo no es carrera: comparar con apps o redes suele generar ansiedad innecesaria.',
+      'Descanso de cuidadores: turnos o ayuda externa sostiene la paciencia.',
+      'Disfrutar pequeños momentos sin foto a veces ancla mejor el recuerdo.',
+    ],
+  ];
+
+  static String _tipForBabyDay(DateTime birthDate) {
+    final days = daysSinceBirth(birthDate);
+    final week = (days ~/ 7) + 1;
+    final dayIdx = days % 7;
+    if (week <= tipsByWeekByDay.length) {
+      return tipsByWeekByDay[week - 1][dayIdx];
+    }
+    final w2 = week - tipsByWeekByDay.length - 1;
+    final row = tipsAfterFirstYearByWeekByDay[w2 % tipsAfterFirstYearByWeekByDay.length];
+    return row[dayIdx];
+  }
+
+  static const String _noBirthDate =
+      'Añade la fecha de nacimiento del bebé en ajustes para ver consejos según su edad.';
+
   @override
-  Future<String?> getFact() async {
-    // Por ahora retorna un dato fijo. En el futuro: llamar a API, Firestore, etc.
-    return _defaultFacts[DateTime.now().day % _defaultFacts.length];
+  Future<String?> getFact({DateTime? birthDate}) async {
+    if (birthDate == null) return _noBirthDate;
+    return _tipForBabyDay(birthDate);
   }
 }
