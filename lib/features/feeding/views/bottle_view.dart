@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/db/isar_service.dart';
+import '../../../core/services/next_feeding_notification_service.dart';
 import '../../../core/models/feeding_record.dart';
 import '../../../core/models/enums.dart';
 
@@ -34,6 +35,7 @@ class _BottleViewState extends ConsumerState<BottleView> {
       dateTime: DateTime.now(),
       amountMl: ml,
     ));
+    await NextFeedingNotificationService.syncFromStorage();
 
     if (mounted) Navigator.of(context).pop();
   }

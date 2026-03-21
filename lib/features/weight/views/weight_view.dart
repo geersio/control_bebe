@@ -66,6 +66,7 @@ class _WeightViewState extends ConsumerState<WeightView> {
     return Scaffold(
       backgroundColor: AppTheme.background,
       body: SafeArea(
+        bottom: false,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -356,9 +357,21 @@ class _WeightViewState extends ConsumerState<WeightView> {
                                       ?.copyWith(fontWeight: FontWeight.bold),
                                 ),
                                 const SizedBox(height: 12),
-                                ...records.map(
-                                  (r) => _WeightRecordTile(record: r),
-                                ),
+                                if (records.isEmpty)
+                                  Text(
+                                    'Todavía no hay registros. Escribe el peso y pulsa «Registrar» arriba para añadir el primero.',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodyMedium
+                                        ?.copyWith(
+                                          color: AppTheme.textLight,
+                                          height: 1.4,
+                                        ),
+                                  )
+                                else
+                                  ...records.map(
+                                    (r) => _WeightRecordTile(record: r),
+                                  ),
                               ],
                             ),
                             loading: () => const SizedBox.shrink(),

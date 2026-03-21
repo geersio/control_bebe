@@ -9,6 +9,7 @@ import 'package:material_design_icons_flutter/material_design_icons_flutter.dart
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/main_app_title_bar.dart';
 import '../../../core/utils/format_duration.dart';
+import '../../../core/utils/feeding_interval_labels.dart';
 import '../../../core/utils/photo_picker.dart';
 import '../../../core/db/isar_service.dart';
 import '../../../core/models/baby_profile.dart';
@@ -19,6 +20,7 @@ import '../../settings/views/settings_page.dart';
 import '../../../core/models/enums.dart';
 import '../../../core/services/sabias_que_service.dart';
 import '../../../core/providers/record_stream_providers.dart';
+import '../../../core/services/next_feeding_notification_service.dart';
 
 class HomeView extends ConsumerStatefulWidget {
   final ScrollController scrollController;
@@ -179,9 +181,7 @@ class _HomeViewState extends ConsumerState<HomeView> {
     BabyProfile? currentBaby,
   }) async {
     BabyProfile? initial = currentBaby ?? _cachedBaby;
-    if (initial == null) {
-      initial = await IsarService.getBabyProfile();
-    }
+    initial ??= await IsarService.getBabyProfile();
     if (!context.mounted) return;
     await Navigator.push(
       context,
@@ -203,6 +203,7 @@ class _HomeViewState extends ConsumerState<HomeView> {
       ref.invalidate(weightRecordsStreamProvider);
       ref.invalidate(diaperRecordsStreamProvider);
       ref.invalidate(feedingRecordsStreamProvider);
+      await NextFeedingNotificationService.syncFromStorage();
       setState(() {});
     }
   }
@@ -212,6 +213,7 @@ class _HomeViewState extends ConsumerState<HomeView> {
     return Scaffold(
       backgroundColor: AppTheme.background,
       body: SafeArea(
+        bottom: false,
         child: FutureBuilder<Map<String, dynamic>>(
           future: _homeDataFuture,
           builder: (context, snapshot) {
@@ -359,6 +361,8 @@ class _HomeViewState extends ConsumerState<HomeView> {
       'feeding': _FeedingData(
         lastFeedingDetail: lastFeedingDetail,
         lastFeedingAt: lastFeedingAt,
+        expectedFeedingIntervalMinutes:
+            baby?.expectedFeedingIntervalMinutes ?? kDefaultFeedingIntervalMinutes,
       ),
       'diapers': _DiapersData(
         wetCount: wetCount,
@@ -528,10 +532,10 @@ class _AvatarPlaceholderWithOutsideBadge extends StatelessWidget {
             isMale: isMale,
             child: _BabyPhotoPlaceholderInner(isMale: isMale),
           ),
-          // Mitad del badge asoma fuera del círculo; mantiene la esquina inferior derecha del avatar.
+          // Esquina inferior derecha del avatar, más pegado al anillo que sobresaliendo.
           Positioned(
-            right: -2,
-            bottom: -2,
+            right: 6,
+            bottom: 6,
             child: _AddPhotoBadgeOutside(accentColor: accent),
           ),
         ],
@@ -857,7 +861,9 @@ class _UltimaTomaCardState extends State<_UltimaTomaCard>
   void didUpdateWidget(covariant _UltimaTomaCard oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.liveClockActive != widget.liveClockActive ||
-        oldWidget.data.lastFeedingAt != widget.data.lastFeedingAt) {
+        oldWidget.data.lastFeedingAt != widget.data.lastFeedingAt ||
+        oldWidget.data.expectedFeedingIntervalMinutes !=
+            widget.data.expectedFeedingIntervalMinutes) {
       _syncTimer();
       if (mounted) setState(() {});
     }
@@ -884,12 +890,12 @@ class _UltimaTomaCardState extends State<_UltimaTomaCard>
     if (state == AppLifecycleState.resumed && mounted) setState(() {});
   }
 
-  String _nextFeedingHint(DateTime? lastAt) {
+  String _nextFeedingHint(DateTime? lastAt, int intervalMinutes) {
     if (lastAt == null) return '';
-    final next = lastAt.add(const Duration(hours: 3));
+    final next = lastAt.add(Duration(minutes: intervalMinutes));
     final diff = next.difference(DateTime.now());
     if (diff.inMinutes <= 0) return 'Próxima toma pronto';
-    return 'Próxima en ${formatMinutes(diff.inMinutes)}';
+    return 'Próxima toma en ${formatMinutes(diff.inMinutes)}';
   }
 
   @override
@@ -900,7 +906,8 @@ class _UltimaTomaCardState extends State<_UltimaTomaCard>
     final minutesAgo = data.lastFeedingAt != null
         ? DateTime.now().difference(data.lastFeedingAt!).inMinutes
         : null;
-    final subHint = _nextFeedingHint(data.lastFeedingAt);
+    final subHint =
+        _nextFeedingHint(data.lastFeedingAt, data.expectedFeedingIntervalMinutes);
 
     return Material(
       color: AppTheme.palettePrimary,
@@ -1137,7 +1144,7 @@ class _PanalesResumenCard extends StatelessWidget {
                     const SizedBox(height: 10),
                     Text(
                       data.lastRecordedAt == null && data.totalToday == 0
-                          ? 'Sin registros'
+                          ? '—'
                           : (data.totalToday == 1
                               ? '1 cambio'
                               : '${data.totalToday} cambios'),
@@ -1622,10 +1629,12 @@ class _WeightData {
 class _FeedingData {
   final String? lastFeedingDetail;
   final DateTime? lastFeedingAt;
+  final int expectedFeedingIntervalMinutes;
 
   _FeedingData({
     this.lastFeedingDetail,
     this.lastFeedingAt,
+    this.expectedFeedingIntervalMinutes = kDefaultFeedingIntervalMinutes,
   });
 }
 

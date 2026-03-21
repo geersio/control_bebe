@@ -74,6 +74,8 @@ class StorageServiceWeb implements StorageService {
       'createdAt': profile.createdAt?.toIso8601String(),
       'photoUrl': profile.photoUrl,
       'heightCm': profile.heightCm,
+      'expectedFeedingIntervalMinutes': profile.expectedFeedingIntervalMinutes,
+      'notifyNextFeeding': profile.notifyNextFeeding,
     }));
   }
 
@@ -287,6 +289,9 @@ class StorageServiceWeb implements StorageService {
       createdAt: m['createdAt'] != null ? DateTime.parse(m['createdAt'] as String) : null,
       photoUrl: m['photoUrl'] as String?,
       heightCm: (m['heightCm'] as num?)?.toDouble(),
+      expectedFeedingIntervalMinutes:
+          (m['expectedFeedingIntervalMinutes'] as num?)?.toInt() ?? 180,
+      notifyNextFeeding: m['notifyNextFeeding'] as bool? ?? false,
     );
   }
 

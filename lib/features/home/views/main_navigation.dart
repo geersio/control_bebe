@@ -5,6 +5,7 @@ import 'package:material_design_icons_flutter/material_design_icons_flutter.dart
 
 import '../../../core/db/isar_service.dart';
 import '../../../core/providers/record_stream_providers.dart';
+import '../../../core/services/next_feeding_notification_service.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../settings/views/settings_page.dart';
 import 'home_view.dart';
@@ -113,6 +114,7 @@ class _MainNavigationState extends ConsumerState<MainNavigation> {
     ref.invalidate(weightRecordsStreamProvider);
     ref.invalidate(diaperRecordsStreamProvider);
     ref.invalidate(feedingRecordsStreamProvider);
+    await NextFeedingNotificationService.syncFromStorage();
   }
 
   @override
@@ -150,7 +152,9 @@ class _MainNavigationState extends ConsumerState<MainNavigation> {
           borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
           child: Container(
             decoration: const BoxDecoration(color: AppTheme.cardBackground),
+            // top: false — el inset superior es para el notch/status; no aplica a la barra inferior.
             child: SafeArea(
+              top: false,
               child: Padding(
                 padding: const EdgeInsets.symmetric(
                   vertical: 10,

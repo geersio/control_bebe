@@ -5,6 +5,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/auth/auth_service.dart';
+import '../../../core/firebase/firebase_service.dart';
 import '../../../features/onboarding/views/onboarding_view.dart';
 import '../../../features/home/views/main_navigation.dart';
 import '../../../core/db/isar_service.dart';
@@ -18,6 +19,8 @@ class LoginView extends ConsumerStatefulWidget {
 }
 
 class _LoginViewState extends ConsumerState<LoginView> {
+  static const double _primaryActionHeight = 45;
+
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -97,6 +100,38 @@ class _LoginViewState extends ConsumerState<LoginView> {
     }
   }
 
+  Future<void> _signInAsGuestForQr() async {
+    if (!FirebaseService.isAvailable) {
+      setState(() {
+        _errorMessage = 'Hace falta Firebase para unirte con código QR';
+      });
+      return;
+    }
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+    try {
+      await AuthService.signInAnonymously();
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _errorMessage = switch (e.code) {
+          'operation-not-allowed' =>
+            'Invitado no disponible. En Firebase Console → Authentication → Sign-in method, activa "Anónimo".',
+          _ => 'No se pudo entrar como invitado: ${e.message ?? e.code}',
+        };
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _errorMessage = 'No se pudo entrar como invitado';
+      });
+    }
+  }
+
   Future<void> _signInWithApple() async {
     setState(() {
       _isLoading = true;
@@ -145,6 +180,133 @@ class _LoginViewState extends ConsumerState<LoginView> {
       'operation-not-allowed' => 'Método de inicio de sesión no habilitado',
       _ => 'Error al iniciar sesión',
     };
+  }
+
+  String _mapPasswordResetError(String code) {
+    return switch (code) {
+      'invalid-email' => 'Correo electrónico no válido',
+      'user-not-found' => 'No hay cuenta con este correo. Comprueba el email o regístrate.',
+      'user-disabled' => 'Esta cuenta está deshabilitada',
+      'operation-not-allowed' =>
+        'Recuperación por correo no habilitada en Firebase (Authentication → Sign-in method → Email).',
+      _ => 'No se pudo enviar el correo. Inténtalo más tarde.',
+    };
+  }
+
+  Future<void> _openForgotPasswordDialog() async {
+    if (!FirebaseService.isAvailable) return;
+
+    final emailCtrl = TextEditingController(text: _emailController.text.trim());
+    String? dialogError;
+    var sending = false;
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogCtx) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppTheme.dialogRadius),
+              ),
+              title: const Text('Recuperar contraseña'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      'Te enviaremos un enlace para elegir una contraseña nueva.',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: AppTheme.textLight,
+                          ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: emailCtrl,
+                      keyboardType: TextInputType.emailAddress,
+                      autofillHints: const [AutofillHints.email],
+                      decoration: const InputDecoration(
+                        hintText: 'Tu correo electrónico',
+                      ),
+                    ),
+                    if (dialogError != null) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                        dialogError!,
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.error,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: sending ? null : () => Navigator.of(dialogCtx).pop(),
+                  child: const Text('Cancelar'),
+                ),
+                FilledButton(
+                  onPressed: sending
+                      ? null
+                      : () async {
+                          final email = emailCtrl.text.trim();
+                          if (email.isEmpty || !email.contains('@')) {
+                            setDialogState(() {
+                              dialogError = 'Introduce un correo válido';
+                            });
+                            return;
+                          }
+                          setDialogState(() {
+                            sending = true;
+                            dialogError = null;
+                          });
+                          try {
+                            await AuthService.sendPasswordResetEmail(email);
+                            if (!dialogCtx.mounted) return;
+                            Navigator.of(dialogCtx).pop();
+                            if (!mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Revisa tu correo (y spam) para restablecer la contraseña',
+                                ),
+                              ),
+                            );
+                          } on FirebaseAuthException catch (e) {
+                            setDialogState(() {
+                              sending = false;
+                              dialogError = _mapPasswordResetError(e.code);
+                            });
+                          } catch (_) {
+                            setDialogState(() {
+                              sending = false;
+                              dialogError =
+                                  'No se pudo enviar el correo. Inténtalo más tarde.';
+                            });
+                          }
+                        },
+                  child: sending
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Text('Enviar'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    emailCtrl.dispose();
   }
 
   @override
@@ -251,16 +413,6 @@ class _LoginViewState extends ConsumerState<LoginView> {
                 hintText: _emailFocusNode.hasFocus
                     ? null
                     : 'Tu correo electrónico',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.all(Radius.circular(12)),
-                  borderSide: BorderSide(color: Color(0xFFE0E0E0)),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.all(Radius.circular(12)),
-                  borderSide: BorderSide(color: Color(0xFFE0E0E0)),
-                ),
-                filled: true,
-                fillColor: const Color(0xFFFAFAFA),
               ),
               validator: (v) {
                 if (v == null || v.trim().isEmpty) return 'Introduce tu correo';
@@ -280,16 +432,6 @@ class _LoginViewState extends ConsumerState<LoginView> {
                   color: AppTheme.textLight,
                 ),
                 hintText: _passwordFocusNode.hasFocus ? null : 'Tu contraseña',
-                border: const OutlineInputBorder(
-                  borderRadius: BorderRadius.all(Radius.circular(12)),
-                  borderSide: BorderSide(color: Color(0xFFE0E0E0)),
-                ),
-                enabledBorder: const OutlineInputBorder(
-                  borderRadius: BorderRadius.all(Radius.circular(12)),
-                  borderSide: BorderSide(color: Color(0xFFE0E0E0)),
-                ),
-                filled: true,
-                fillColor: const Color(0xFFFAFAFA),
                 suffixIcon: IconButton(
                   icon: Icon(
                     _obscurePassword ? Icons.visibility_off : Icons.visibility,
@@ -304,6 +446,26 @@ class _LoginViewState extends ConsumerState<LoginView> {
                 return null;
               },
             ),
+            const SizedBox(height: 4),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(
+                onPressed: _isLoading ? null : _openForgotPasswordDialog,
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: Text(
+                  '¿Has olvidado tu contraseña?',
+                  style: TextStyle(
+                    color: AppTheme.primaryBlue,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+            ),
             if (_errorMessage != null) ...[
               const SizedBox(height: 12),
               Text(
@@ -313,14 +475,17 @@ class _LoginViewState extends ConsumerState<LoginView> {
             ],
             const SizedBox(height: 24),
             SizedBox(
-              height: 52,
+              height: _primaryActionHeight,
+              width: double.infinity,
               child: ElevatedButton(
                 onPressed: _isLoading ? null : _signInWithEmail,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF2C2C2C),
-                  foregroundColor: Colors.white,
+                  minimumSize: const Size(double.infinity, _primaryActionHeight),
+                  maximumSize: const Size(double.infinity, _primaryActionHeight),
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(AppTheme.cardRadius),
                   ),
                 ),
                 child: _isLoading
@@ -338,7 +503,41 @@ class _LoginViewState extends ConsumerState<LoginView> {
                       ),
               ),
             ),
-            const SizedBox(height: 28),
+            const SizedBox(height: 12),
+            SizedBox(
+              height: _primaryActionHeight,
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: _isLoading ? null : _signInAsGuestForQr,
+                icon: Icon(Icons.qr_code_scanner, color: AppTheme.primaryBlue),
+                label: Text(
+                  'Unirme con código QR (sin cuenta)',
+                  style: TextStyle(
+                    color: AppTheme.primaryBlue,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(double.infinity, _primaryActionHeight),
+                  maximumSize: const Size(double.infinity, _primaryActionHeight),
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  side: const BorderSide(color: AppTheme.primaryBlue, width: 1.5),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AppTheme.cardRadius),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Escanea el QR que te comparte la familia',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: AppTheme.textLight,
+                  ),
+            ),
+            const SizedBox(height: 24),
             Row(
               children: [
                 Expanded(child: Divider(color: Colors.grey.shade300)),

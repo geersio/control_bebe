@@ -1,12 +1,14 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../core/auth/auth_service.dart';
 import '../../../core/db/isar_service.dart';
 import '../../../core/firebase/firebase_service.dart';
 import '../../../core/models/baby_profile.dart';
+import '../../auth/views/family_qr_join_screen.dart';
 import '../../home/views/main_navigation.dart';
 
 class OnboardingView extends ConsumerStatefulWidget {
@@ -53,7 +55,18 @@ class _OnboardingViewState extends ConsumerState<OnboardingView> {
       }
       return;
     }
-    if (!_formKey.currentState!.validate()) return;
+    if (!(_formKey.currentState?.validate() ?? false)) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Revisa la talla: número entre 25 y 130 cm, o deja el campo vacío',
+            ),
+          ),
+        );
+      }
+      return;
+    }
 
     double? heightCm;
     final heightText = _heightController.text.trim();
@@ -69,9 +82,32 @@ class _OnboardingViewState extends ConsumerState<OnboardingView> {
       heightCm: heightCm,
     );
 
-    await IsarService.saveBabyProfile(profile);
-    await IsarService.completeOnboarding();
-    _goToMain();
+    try {
+      await IsarService.saveBabyProfile(profile);
+      await IsarService.completeOnboarding();
+      if (!mounted) return;
+      _goToMain();
+    } on FirebaseException catch (e) {
+      debugPrint('[onboarding] guardar perfil: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              e.code == 'permission-denied'
+                  ? 'Sin permiso en Firebase (reglas o sesión). Revisa Firestore.'
+                  : 'No se pudo guardar (${e.code}). Revisa conexión y Firebase.',
+            ),
+          ),
+        );
+      }
+    } catch (e, st) {
+      debugPrint('[onboarding] guardar perfil: $e\n$st');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('No se pudo guardar: $e')),
+        );
+      }
+    }
   }
 
   Future<void> _joinAndComplete(String familyId) async {
@@ -80,10 +116,48 @@ class _OnboardingViewState extends ConsumerState<OnboardingView> {
     _goToMain();
   }
 
+  Future<void> _confirmExitToLogin() async {
+    final go = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppTheme.dialogRadius),
+        ),
+        title: const Text('¿Salir?'),
+        content: const Text(
+          'Cerrarás sesión y volverás a la pantalla de inicio de sesión.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(
+              'Salir',
+              style: TextStyle(color: Theme.of(ctx).colorScheme.error),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (go != true || !mounted) return;
+    try {
+      await AuthService.signOut();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('No se pudo cerrar sesión: $e')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_mode == 'scan') {
-      return _ScanBabyScreen(
+      return FamilyQrJoinScreen(
         onScanned: _joinAndComplete,
         onBack: () => setState(() => _mode = null),
       );
@@ -101,6 +175,7 @@ class _OnboardingViewState extends ConsumerState<OnboardingView> {
         onIsMaleChanged: (v) => setState(() => _isMale = v),
         onBirthDateChanged: (d) => setState(() => _birthDate = d),
         onComplete: _completeCreate,
+        onExitToLogin: _confirmExitToLogin,
         onBack: _createStep == 0
             ? () => setState(() => _mode = null)
             : () => setState(() => _createStep--),
@@ -111,6 +186,7 @@ class _OnboardingViewState extends ConsumerState<OnboardingView> {
       onCreate: () => setState(() => _mode = 'create'),
       onScan: () => setState(() => _mode = 'scan'),
       canScan: FirebaseService.isAvailable,
+      onExitToLogin: _confirmExitToLogin,
     );
   }
 }
@@ -118,11 +194,13 @@ class _OnboardingViewState extends ConsumerState<OnboardingView> {
 class _ChoiceScreen extends StatelessWidget {
   final VoidCallback onCreate;
   final VoidCallback onScan;
+  final VoidCallback onExitToLogin;
   final bool canScan;
 
   const _ChoiceScreen({
     required this.onCreate,
     required this.onScan,
+    required this.onExitToLogin,
     required this.canScan,
   });
 
@@ -141,42 +219,81 @@ class _ChoiceScreen extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const SizedBox(height: 40),
-              Icon(Icons.child_care, size: 64, color: AppTheme.primaryPink),
-              const SizedBox(height: 16),
-              Text(
-                'Bienvenido a MiBebé Diario',
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: AppTheme.textDark,
-                    ),
+              Expanded(
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const SizedBox(height: 24),
+                      Center(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.1),
+                                blurRadius: 20,
+                                offset: const Offset(0, 8),
+                              ),
+                            ],
+                          ),
+                          child: Image.asset(
+                            'assets/images/app_icon.png',
+                            width: 120,
+                            height: 120,
+                            fit: BoxFit.contain,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      Text(
+                        'Bienvenido a MiBebé Diario',
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.textDark,
+                            ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        '¿Cómo quieres empezar?',
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              color: AppTheme.textLight,
+                            ),
+                      ),
+                      const SizedBox(height: 40),
+                      _ChoiceCard(
+                        icon: Icons.add_circle_outline,
+                        iconColor: AppTheme.primaryBlue,
+                        title: 'Crear bebé',
+                        subtitle: 'Configura un nuevo perfil desde cero',
+                        onTap: onCreate,
+                      ),
+                      const SizedBox(height: 16),
+                      _ChoiceCard(
+                        icon: Icons.qr_code_scanner,
+                        iconColor: AppTheme.primaryGreen,
+                        title: 'Escanear bebé',
+                        subtitle: canScan
+                            ? 'Únete a un bebé ya creado escaneando su código QR'
+                            : 'Requiere Firebase para compartir',
+                        onTap: canScan ? onScan : null,
+                      ),
+                      const SizedBox(height: 24),
+                    ],
+                  ),
+                ),
               ),
-              const SizedBox(height: 8),
-              Text(
-                '¿Cómo quieres empezar?',
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: AppTheme.textLight,
-                    ),
-              ),
-              const SizedBox(height: 40),
-              _ChoiceCard(
-                icon: Icons.add_circle_outline,
-                iconColor: AppTheme.primaryBlue,
-                title: 'Crear bebé',
-                subtitle: 'Configura un nuevo perfil desde cero',
-                onTap: onCreate,
-              ),
-              const SizedBox(height: 16),
-              _ChoiceCard(
-                icon: Icons.qr_code_scanner,
-                iconColor: AppTheme.primaryGreen,
-                title: 'Escanear bebé',
-                subtitle: canScan
-                    ? 'Únete a un bebé ya creado escaneando su código QR'
-                    : 'Requiere Firebase para compartir',
-                onTap: canScan ? onScan : null,
+              TextButton.icon(
+                onPressed: onExitToLogin,
+                icon: Icon(Icons.logout, size: 20, color: AppTheme.textLight),
+                label: Text(
+                  'Salir y volver al inicio de sesión',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: AppTheme.textLight,
+                        fontWeight: FontWeight.w600,
+                      ),
+                ),
               ),
             ],
           ),
@@ -217,7 +334,7 @@ class _ChoiceCard extends StatelessWidget {
                 height: 56,
                 decoration: BoxDecoration(
                   color: iconColor.withValues(alpha: enabled ? 0.15 : 0.08),
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(AppTheme.fieldRadius),
                 ),
                 child: Icon(icon, color: enabled ? iconColor : AppTheme.textLight, size: 28),
               ),
@@ -252,218 +369,6 @@ class _ChoiceCard extends StatelessWidget {
   }
 }
 
-class _ScanBabyScreen extends StatefulWidget {
-  final Future<void> Function(String familyId) onScanned;
-  final VoidCallback onBack;
-
-  const _ScanBabyScreen({required this.onScanned, required this.onBack});
-
-  @override
-  State<_ScanBabyScreen> createState() => _ScanBabyScreenState();
-}
-
-class _ScanBabyScreenState extends State<_ScanBabyScreen> {
-  final _controller = MobileScannerController(
-    detectionSpeed: DetectionSpeed.normal,
-    facing: CameraFacing.back,
-    torchEnabled: false,
-  );
-  bool _processing = false;
-  String? _error;
-
-  /// Mensaje visible al usuario: resumen en español + detalle técnico para diagnosticar el fallo.
-  static String _joinFailureDescription(Object error) {
-    final technical = _technicalErrorText(error);
-    final summary = _joinFailureSummary(error);
-    if (technical == summary) return summary;
-    return '$summary\n\nDetalle: $technical';
-  }
-
-  static String _joinFailureSummary(Object error) {
-    if (error is FirebaseException) {
-      switch (error.code) {
-        case 'permission-denied':
-          return 'Permiso denegado en Firebase (reglas de Firestore o sesión).';
-        case 'unavailable':
-          return 'Firebase no está disponible. Revisa la conexión a internet.';
-        case 'not-found':
-        case 'not_found':
-          return 'Recurso no encontrado en Firebase.';
-        default:
-          return 'Error de Firebase (${error.code}).';
-      }
-    }
-    if (error is StateError) {
-      final m = error.message;
-      if (m.contains('no encontrada')) {
-        return 'Familia no encontrada. Comprueba que el QR sea correcto.';
-      }
-      return 'Error al procesar el código del QR.';
-    }
-    if (error is UnsupportedError) {
-      return 'Unirse por QR no está disponible (hace falta Firebase en este dispositivo).';
-    }
-    return 'No se pudo unir a la familia.';
-  }
-
-  static String _technicalErrorText(Object error) {
-    if (error is FirebaseException) {
-      final msg = error.message;
-      if (msg != null && msg.isNotEmpty) return '${error.code}: $msg';
-      return error.code;
-    }
-    return error.toString();
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  void _onDetect(BarcodeCapture capture) async {
-    if (_processing) return;
-    final barcode = capture.barcodes.firstOrNull;
-    final code = barcode?.rawValue?.trim();
-    if (code == null || code.isEmpty) return;
-
-    setState(() {
-      _processing = true;
-      _error = null;
-    });
-
-    try {
-      await widget.onScanned(code);
-    } catch (e, st) {
-      debugPrint('[QR join] $e\n$st');
-      if (mounted) {
-        setState(() {
-          _processing = false;
-          _error = _joinFailureDescription(e);
-        });
-      }
-    }
-  }
-
-  void _onDetectError(Object error, StackTrace stackTrace) {
-    debugPrint('[QR decode] $error\n$stackTrace');
-    if (!mounted) return;
-    setState(() {
-      _processing = false;
-      _error =
-          'Fallo al leer o decodificar el código.\n\nDetalle: ${error.toString()}';
-    });
-  }
-
-  Widget _cameraErrorWidget(BuildContext context, MobileScannerException error) {
-    final detail = error.errorDetails?.message;
-    return ColoredBox(
-      color: Colors.black,
-      child: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.videocam_off, color: Colors.white, size: 48),
-              const SizedBox(height: 16),
-              Text(
-                error.errorCode.message,
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.white, fontSize: 16),
-              ),
-              if (detail != null && detail.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Text(
-                  detail,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.white.withValues(alpha: 0.9), fontSize: 14),
-                ),
-              ],
-              const SizedBox(height: 12),
-              Text(
-                'Código interno: ${error.errorCode.name}',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.white.withValues(alpha: 0.65), fontSize: 12),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.black,
-        foregroundColor: Colors.white,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: widget.onBack,
-        ),
-        title: const Text('Escanear código QR'),
-      ),
-      body: Stack(
-        children: [
-          MobileScanner(
-            controller: _controller,
-            onDetect: _onDetect,
-            onDetectError: _onDetectError,
-            errorBuilder: _cameraErrorWidget,
-          ),
-          Center(
-            child: Container(
-              width: 260,
-              height: 260,
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.white54, width: 2),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: const SizedBox.expand(),
-            ),
-          ),
-          Positioned(
-            bottom: 40,
-            left: AppTheme.screenEdgePadding,
-            right: AppTheme.screenEdgePadding,
-            child: Column(
-              children: [
-                Text(
-                  'Apunta la cámara al código QR del bebé',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.white.withValues(alpha: 0.9), fontSize: 16),
-                ),
-                if (_error != null) ...[
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.red.withValues(alpha: 0.8),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: SelectableText(
-                      _error!,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(color: Colors.white, fontSize: 14),
-                    ),
-                  ),
-                ],
-                if (_processing) ...[
-                  const SizedBox(height: 24),
-                  const CircularProgressIndicator(color: Colors.white),
-                ],
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _CreateBabyScreen extends StatelessWidget {
   final GlobalKey<FormState> formKey;
   final TextEditingController nameController;
@@ -474,8 +379,9 @@ class _CreateBabyScreen extends StatelessWidget {
   final void Function(int) onStepChanged;
   final void Function(bool) onIsMaleChanged;
   final void Function(DateTime) onBirthDateChanged;
-  final VoidCallback onComplete;
+  final Future<void> Function() onComplete;
   final VoidCallback onBack;
+  final Future<void> Function() onExitToLogin;
 
   const _CreateBabyScreen({
     required this.formKey,
@@ -489,9 +395,10 @@ class _CreateBabyScreen extends StatelessWidget {
     required this.onBirthDateChanged,
     required this.onComplete,
     required this.onBack,
+    required this.onExitToLogin,
   });
 
-  void _onPrimaryPressed() {
+  Future<void> _onPrimaryPressed() async {
     if (step == 0) {
       if (formKey.currentState?.validate() ?? false) {
         onStepChanged(1);
@@ -502,7 +409,7 @@ class _CreateBabyScreen extends StatelessWidget {
       onStepChanged(step + 1);
       return;
     }
-    onComplete();
+    await onComplete();
   }
 
   static String? _optionalHeightCmValidator(String? v) {
@@ -517,47 +424,110 @@ class _CreateBabyScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppTheme.background,
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Form(
-            key: formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const SizedBox(height: 40),
-                Icon(Icons.child_care, size: 64, color: AppTheme.primaryPink),
-                const SizedBox(height: 16),
-                Text(
-                  'Crear perfil del bebé',
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: AppTheme.textDark,
-                      ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Configura los datos de tu bebé',
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: AppTheme.textLight,
-                      ),
-                ),
-                const SizedBox(height: 40),
-                Expanded(child: _buildStepContent(context)),
-                ElevatedButton(
-                  onPressed: _onPrimaryPressed,
-                  child: Text(step < 3 ? 'Siguiente' : 'Comenzar'),
-                ),
-                if (step > 0)
-                  TextButton(
-                    onPressed: onBack,
-                    child: const Text('Atrás'),
-                  ),
-              ],
+      appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: onBack,
+        ),
+        title: const Text('Configurar bebé'),
+        actions: [
+          TextButton(
+            onPressed: () => onExitToLogin(),
+            child: Text(
+              'Salir',
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.error,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
+        ],
+      ),
+      body: Form(
+        key: formKey,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(
+                  AppTheme.screenEdgePadding,
+                  8,
+                  AppTheme.screenEdgePadding,
+                  16,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 120,
+                        height: 120,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: AppTheme.primaryPink.withValues(alpha: 0.15),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.08),
+                              blurRadius: 20,
+                              offset: const Offset(0, 8),
+                            ),
+                          ],
+                        ),
+                        child: Center(
+                          child: FaIcon(
+                            FontAwesomeIcons.baby,
+                            color: AppTheme.primaryPink,
+                            size: 52,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    Text(
+                      'Crear perfil del bebé',
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                            fontWeight: FontWeight.bold,
+                            color: AppTheme.textDark,
+                          ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Configura los datos de tu bebé',
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: AppTheme.textLight,
+                          ),
+                    ),
+                    const SizedBox(height: 32),
+                    _buildStepContent(context),
+                  ],
+                ),
+              ),
+            ),
+            SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppTheme.screenEdgePadding,
+                  0,
+                  AppTheme.screenEdgePadding,
+                  AppTheme.screenEdgePadding,
+                ),
+                child: SizedBox(
+                  height: 52,
+                  child: ElevatedButton(
+                    onPressed: () => _onPrimaryPressed(),
+                    child: Text(
+                      step < 3 ? 'Siguiente' : 'Comenzar',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -579,9 +549,12 @@ class _CreateBabyScreen extends StatelessWidget {
             const SizedBox(height: 12),
             TextFormField(
               controller: nameController,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 hintText: 'Ej: María, Lucas...',
-                prefixIcon: Icon(Icons.badge_outlined),
+                prefixIcon: Icon(
+                  Icons.badge_outlined,
+                  color: AppTheme.textLight,
+                ),
               ),
               validator: (v) {
                 if (v == null || v.trim().isEmpty) {
@@ -652,23 +625,26 @@ class _CreateBabyScreen extends StatelessWidget {
                 );
                 if (date != null) onBirthDateChanged(date);
               },
-              borderRadius: BorderRadius.circular(AppTheme.cardRadius),
+              borderRadius: BorderRadius.circular(AppTheme.fieldRadius),
               child: Container(
-                padding: const EdgeInsets.all(20),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF5F5F5),
-                  borderRadius: BorderRadius.circular(AppTheme.cardRadius),
+                  color: AppTheme.fieldBackground,
+                  borderRadius: BorderRadius.circular(AppTheme.fieldRadius),
+                  border: Border.all(color: AppTheme.fieldBorder),
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.calendar_today),
+                    Icon(Icons.calendar_today, color: AppTheme.textLight),
                     const SizedBox(width: 16),
                     Text(
                       '${birthDate.day}/${birthDate.month}/${birthDate.year}',
-                      style: Theme.of(context).textTheme.titleMedium,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            color: AppTheme.textDark,
+                          ),
                     ),
                     const Spacer(),
-                    const Icon(Icons.chevron_right),
+                    Icon(Icons.chevron_right, color: AppTheme.textLight),
                   ],
                 ),
               ),
@@ -704,9 +680,12 @@ class _CreateBabyScreen extends StatelessWidget {
             TextFormField(
               controller: heightController,
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 hintText: 'Dejar vacío si no la conoces',
-                prefixIcon: Icon(Icons.straighten_outlined),
+                prefixIcon: Icon(
+                  Icons.straighten_outlined,
+                  color: AppTheme.textLight,
+                ),
                 suffixText: 'cm',
               ),
               validator: _optionalHeightCmValidator,
@@ -741,7 +720,9 @@ class _GenderOption extends StatelessWidget {
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(vertical: 24),
         decoration: BoxDecoration(
-          color: selected ? AppTheme.primaryBlue.withValues(alpha: 0.15) : Colors.white,
+          color: selected
+              ? AppTheme.primaryBlue.withValues(alpha: 0.15)
+              : AppTheme.cardBackground,
           borderRadius: BorderRadius.circular(AppTheme.cardRadius),
           boxShadow: [
             BoxShadow(

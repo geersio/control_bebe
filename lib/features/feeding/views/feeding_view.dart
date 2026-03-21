@@ -14,6 +14,7 @@ import '../../../core/db/isar_service.dart';
 import '../../../core/providers/record_stream_providers.dart';
 import '../../../core/widgets/edit_dialog_fields.dart';
 import '../../../core/widgets/edit_bottom_sheet.dart';
+import '../../../core/services/next_feeding_notification_service.dart';
 import '../../../core/widgets/stream_record_load_error.dart';
 import '../../../core/models/feeding_record.dart';
 import '../../../core/models/lactation_timer.dart';
@@ -91,6 +92,7 @@ class _FeedingViewState extends ConsumerState<FeedingView> {
           durationSeconds: timer.elapsed.inSeconds,
         ),
       );
+      await NextFeedingNotificationService.syncFromStorage();
     }
   }
 
@@ -121,14 +123,31 @@ class _FeedingViewState extends ConsumerState<FeedingView> {
       }
       grouped.putIfAbsent(key, () => []).add(r);
     }
+    final titleStyle = Theme.of(context).textTheme.titleMedium?.copyWith(
+          fontWeight: FontWeight.bold,
+        );
+    if (sorted.isEmpty) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Historial', style: titleStyle),
+          const SizedBox(height: 12),
+          Text(
+            'Todavía no hay registros. Inicia una toma (pecho) o pulsa «Biberón» arriba para añadir la primera.',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: AppTheme.textLight,
+                  height: 1.4,
+                ),
+          ),
+        ],
+      );
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           'Historial',
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+          style: titleStyle,
         ),
         const SizedBox(height: 16),
         ...grouped.entries.expand(
@@ -166,6 +185,7 @@ class _FeedingViewState extends ConsumerState<FeedingView> {
     return Scaffold(
       backgroundColor: AppTheme.background,
       body: SafeArea(
+        bottom: false,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -232,8 +252,9 @@ class _FeedingViewState extends ConsumerState<FeedingView> {
                                       LactationSide.left) {
                                     await _stopBreast();
                                   } else {
-                                    if (_activeTimer != null)
+                                    if (_activeTimer != null) {
                                       await _stopBreast();
+                                    }
                                     await _startBreast(LactationSide.left);
                                   }
                                 },
@@ -255,8 +276,9 @@ class _FeedingViewState extends ConsumerState<FeedingView> {
                                       LactationSide.right) {
                                     await _stopBreast();
                                   } else {
-                                    if (_activeTimer != null)
+                                    if (_activeTimer != null) {
                                       await _stopBreast();
+                                    }
                                     await _startBreast(LactationSide.right);
                                   }
                                 },

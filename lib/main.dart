@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -6,8 +8,10 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'core/theme/app_theme.dart';
 import 'core/widgets/splash_screen.dart';
 import 'core/db/isar_service.dart';
+import 'core/services/next_feeding_notification_service.dart';
 import 'core/firebase/firebase_service.dart';
 import 'core/auth/auth_service.dart';
+import 'features/auth/views/family_qr_join_screen.dart';
 import 'features/auth/views/login_view.dart';
 import 'features/onboarding/views/onboarding_view.dart';
 import 'features/home/views/main_navigation.dart';
@@ -17,6 +21,7 @@ void main() async {
   await initializeDateFormatting('es', null);
   await FirebaseService.initialize();
   await IsarService.initialize();
+  await NextFeedingNotificationService.init();
   runApp(const ProviderScope(child: ControlBebeApp()));
 }
 
@@ -45,6 +50,7 @@ class ControlBebeApp extends ConsumerWidget {
 }
 
 /// Envuelve la app y muestra Login si no hay usuario autenticado.
+/// Usuarios anónimos sin `familyId` ven el escáner QR (invitado) hasta unirse o cerrar sesión.
 class AuthWrapper extends ConsumerWidget {
   const AuthWrapper({super.key});
 
@@ -54,7 +60,7 @@ class AuthWrapper extends ConsumerWidget {
       // Firebase no configurado: arrancar sin auth (modo desarrollo)
       return const AppInitializer();
     }
-    return StreamBuilder(
+    return StreamBuilder<User?>(
       stream: AuthService.authStateChanges,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
@@ -63,7 +69,67 @@ class AuthWrapper extends ConsumerWidget {
         if (snapshot.data == null) {
           return const LoginView();
         }
+        final user = snapshot.data!;
+        if (user.isAnonymous) {
+          return const _AnonymousGuestGate();
+        }
         return const AppInitializer();
+      },
+    );
+  }
+}
+
+class _AnonymousGuestGate extends StatefulWidget {
+  const _AnonymousGuestGate();
+
+  @override
+  State<_AnonymousGuestGate> createState() => _AnonymousGuestGateState();
+}
+
+class _AnonymousGuestGateState extends State<_AnonymousGuestGate> {
+  Future<bool>? _familyCheck;
+
+  @override
+  void initState() {
+    super.initState();
+    _familyCheck = _userHasFamilyId();
+  }
+
+  Future<bool> _userHasFamilyId() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return false;
+    final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+    final id = doc.data()?['familyId'] as String?;
+    return id != null && id.isNotEmpty;
+  }
+
+  Future<void> _onQrScanned(String familyId) async {
+    await IsarService.joinFamily(familyId);
+    await IsarService.completeOnboarding();
+    await IsarService.initialize();
+    if (mounted) {
+      setState(() {
+        _familyCheck = _userHasFamilyId();
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<bool>(
+      future: _familyCheck,
+      builder: (context, snap) {
+        if (snap.connectionState != ConnectionState.done) {
+          return const SplashScreen();
+        }
+        if (snap.data == true) {
+          return const AppInitializer();
+        }
+        return FamilyQrJoinScreen(
+          hintText: 'Escanea el QR que te comparte la familia',
+          onScanned: _onQrScanned,
+          onBack: () => AuthService.signOut(),
+        );
       },
     );
   }
@@ -93,6 +159,9 @@ class _AppInitializerState extends ConsumerState<AppInitializer> {
         _needsOnboarding = needsOnboarding;
         _isReady = true;
       });
+      if (!needsOnboarding) {
+        await NextFeedingNotificationService.syncFromStorage();
+      }
     }
   }
 

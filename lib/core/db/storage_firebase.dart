@@ -33,6 +33,7 @@ class StorageServiceFirebase implements StorageService {
   }
 
   /// Obtiene el familyId del usuario. Crea familia y user doc si no existen.
+  /// Sin revalidar/borrar el id en cada arranque (evita onboarding y familias duplicadas).
   Future<String> _getOrCreateFamilyId() async {
     final familyId = await _getFamilyIdOnly();
     if (familyId != null) return familyId;
@@ -44,9 +45,11 @@ class StorageServiceFirebase implements StorageService {
     final familyRef = _firestore.collection('families').doc();
     final familyId = familyRef.id;
 
+    // En create, usar lista literal [_uid]: con arrayUnion las reglas suelen no ver
+    // request.resource.data.members y falla permission-denied para cuentas nuevas.
     await _firestore.runTransaction((tx) async {
       tx.set(familyRef, {
-        'members': FieldValue.arrayUnion([_uid]),
+        'members': <String>[_uid],
         'app_settings': {
           'onboardingCompleted': false,
           'homeCardOrder': ['weight', 'feeding', 'diapers'],
@@ -83,11 +86,21 @@ class StorageServiceFirebase implements StorageService {
       if (familyId == null) return true;
       final doc = await _familyDoc(familyId).get();
       if (!doc.exists) return true;
-      final settings = doc.data()?['app_settings'] as Map<String, dynamic>?;
-      return settings?['onboardingCompleted'] != true;
+      final data = doc.data();
+      final settings = data?['app_settings'] as Map<String, dynamic>?;
+      if (settings?['onboardingCompleted'] == true) return false;
+      // Datos creados antes de este flag o editados a mano: si ya hay perfil de bebé, no bloquear.
+      if (_hasUsableBabyProfileMap(data?['baby_profile'])) return false;
+      return true;
     } catch (_) {
       return true;
     }
+  }
+
+  static bool _hasUsableBabyProfileMap(Object? raw) {
+    if (raw is! Map<String, dynamic>) return false;
+    final name = raw['name'];
+    return name is String && name.trim().isNotEmpty;
   }
 
   @override
@@ -117,6 +130,9 @@ class StorageServiceFirebase implements StorageService {
       createdAt: data['createdAt'] != null ? DateTime.parse(data['createdAt'] as String) : null,
       photoUrl: data['photoUrl'] as String?,
       heightCm: (data['heightCm'] as num?)?.toDouble(),
+      expectedFeedingIntervalMinutes:
+          (data['expectedFeedingIntervalMinutes'] as num?)?.toInt() ?? 180,
+      notifyNextFeeding: data['notifyNextFeeding'] as bool? ?? false,
     );
   }
 
@@ -132,6 +148,8 @@ class StorageServiceFirebase implements StorageService {
         'createdAt': profile.createdAt?.toIso8601String(),
         'photoUrl': profile.photoUrl,
         'heightCm': profile.heightCm,
+        'expectedFeedingIntervalMinutes': profile.expectedFeedingIntervalMinutes,
+        'notifyNextFeeding': profile.notifyNextFeeding,
       },
     }, SetOptions(merge: true));
   }

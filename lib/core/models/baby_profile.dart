@@ -9,6 +9,10 @@ class BabyProfile {
   final String? photoUrl;
   /// Altura actual en centímetros (opcional).
   final double? heightCm;
+  /// Minutos entre tomas sugeridas (inicio y notificación). Por defecto 180 (3 h).
+  final int expectedFeedingIntervalMinutes;
+  /// Si es true, notificación local cuando llega la hora sugerida tras la última toma.
+  final bool notifyNextFeeding;
 
   BabyProfile({
     this.id,
@@ -18,6 +22,8 @@ class BabyProfile {
     this.createdAt,
     this.photoUrl,
     this.heightCm,
+    this.expectedFeedingIntervalMinutes = 180,
+    this.notifyNextFeeding = false,
   });
 
   BabyProfile copyWith({
@@ -28,6 +34,8 @@ class BabyProfile {
     DateTime? createdAt,
     String? photoUrl,
     double? heightCm,
+    int? expectedFeedingIntervalMinutes,
+    bool? notifyNextFeeding,
     /// Si es true, se asigna [photoUrl] tal cual (puede ser null para borrar la foto).
     bool setPhotoUrl = false,
     /// Si es true, se asigna [heightCm] tal cual (puede ser null para borrar).
@@ -41,6 +49,9 @@ class BabyProfile {
         createdAt: createdAt ?? this.createdAt,
         photoUrl: setPhotoUrl ? photoUrl : (photoUrl ?? this.photoUrl),
         heightCm: setHeightCm ? heightCm : (heightCm ?? this.heightCm),
+        expectedFeedingIntervalMinutes:
+            expectedFeedingIntervalMinutes ?? this.expectedFeedingIntervalMinutes,
+        notifyNextFeeding: notifyNextFeeding ?? this.notifyNextFeeding,
       );
 
   /// Edad en meses decimales desde el nacimiento

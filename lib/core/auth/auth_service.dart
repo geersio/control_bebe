@@ -23,6 +23,11 @@ class AuthService {
     return await _auth.signInWithEmailAndPassword(email: email, password: password);
   }
 
+  /// Envía correo de restablecimiento de contraseña (Firebase Auth).
+  static Future<void> sendPasswordResetEmail(String email) async {
+    await _auth.sendPasswordResetEmail(email: email.trim());
+  }
+
   /// Login con Google
   static Future<UserCredential?> signInWithGoogle() async {
     final googleSignIn = _createGoogleSignIn();
@@ -46,6 +51,11 @@ class AuthService {
   /// Registro con email y contraseña
   static Future<UserCredential?> signUpWithEmail(String email, String password) async {
     return await _auth.createUserWithEmailAndPassword(email: email, password: password);
+  }
+
+  /// Sesión de invitado (sin correo). Requiere tener "Anónimo" activado en Firebase Auth.
+  static Future<UserCredential> signInAnonymously() async {
+    return await _auth.signInAnonymously();
   }
 
   /// Cerrar sesión

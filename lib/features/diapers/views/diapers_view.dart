@@ -75,14 +75,31 @@ class _DiapersViewState extends ConsumerState<DiapersView> {
       }
       grouped.putIfAbsent(key, () => []).add(r);
     }
+    final titleStyle = Theme.of(context).textTheme.titleMedium?.copyWith(
+          fontWeight: FontWeight.bold,
+        );
+    if (sorted.isEmpty) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Historial', style: titleStyle),
+          const SizedBox(height: 12),
+          Text(
+            'Todavía no hay registros. Usa «Registrar cambio de pañal» arriba para añadir el primero.',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: AppTheme.textLight,
+                  height: 1.4,
+                ),
+          ),
+        ],
+      );
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           'Historial',
-          style: Theme.of(
-            context,
-          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+          style: titleStyle,
         ),
         const SizedBox(height: 16),
         ...grouped.entries.expand(
@@ -127,6 +144,7 @@ class _DiapersViewState extends ConsumerState<DiapersView> {
     return Scaffold(
       backgroundColor: AppTheme.background,
       body: SafeArea(
+        bottom: false,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [

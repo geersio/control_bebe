@@ -6,6 +6,8 @@ import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/db/isar_service.dart';
+import '../../../core/services/next_feeding_notification_service.dart';
+import '../../../core/utils/feeding_interval_labels.dart';
 import '../../../core/auth/auth_service.dart';
 import '../../../core/models/baby_profile.dart';
 import '../../auth/views/login_view.dart';
@@ -27,6 +29,54 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   void initState() {
     super.initState();
     _baby = widget.initialBaby;
+    _refreshBabyFromStorage();
+  }
+
+  Future<void> _refreshBabyFromStorage() async {
+    final b = await IsarService.getBabyProfile();
+    if (!mounted || b == null) return;
+    setState(() => _baby = b);
+  }
+
+  int _intervalForDropdown(BabyProfile b) {
+    final m = b.expectedFeedingIntervalMinutes.clamp(30, 720);
+    if (kFeedingIntervalPresetMinutes.contains(m)) return m;
+    return kFeedingIntervalPresetMinutes.reduce(
+      (a, c) => (m - a).abs() <= (m - c).abs() ? a : c,
+    );
+  }
+
+  Future<void> _saveFeedingSchedule({
+    required int intervalMinutes,
+    required bool notifyNextFeeding,
+  }) async {
+    final b = _baby;
+    if (b == null) return;
+    var notify = notifyNextFeeding;
+    if (notify) {
+      final ok = await NextFeedingNotificationService.requestPermissions();
+      if (!ok && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Activa las notificaciones en los ajustes del sistema para recibir el aviso.',
+            ),
+          ),
+        );
+        notify = false;
+      }
+    }
+    final clamped = intervalMinutes.clamp(30, 720);
+    final updated = b.copyWith(
+      expectedFeedingIntervalMinutes: clamped,
+      notifyNextFeeding: notify,
+    );
+    await IsarService.saveBabyProfile(updated);
+    await NextFeedingNotificationService.syncFromStorage();
+    if (mounted) {
+      setState(() => _baby = updated);
+      widget.onProfileSaved?.call(updated);
+    }
   }
 
   Future<void> _editProfile() async {
@@ -242,11 +292,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             onPressed: () => Navigator.pop(ctx, false),
             child: const Text('Cancelar'),
           ),
-          FilledButton(
+          TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(ctx).colorScheme.error,
-              foregroundColor: Theme.of(ctx).colorScheme.onError,
+            style: TextButton.styleFrom(
+              foregroundColor: Theme.of(ctx).colorScheme.error,
             ),
             child: const Text('Cerrar sesión'),
           ),
@@ -367,23 +416,120 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   ),
                   const SizedBox(height: 16),
                   _SettingsCard(
-                    title: 'Cerrar sesión',
-                    titleColor: Theme.of(context).colorScheme.error,
+                    title: 'Tomas sugeridas',
                     leading: Icon(
-                      Icons.logout,
-                      color: Theme.of(context).colorScheme.error,
+                      Icons.schedule,
+                      color: AppTheme.primaryBlue,
                       size: 24,
                     ),
+                    children: [
+                      if (_baby == null)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: Text(
+                            'Configura primero el perfil del bebé.',
+                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                  color: AppTheme.textLight,
+                                ),
+                          ),
+                        )
+                      else ...[
+                        const Padding(
+                          padding: EdgeInsets.only(bottom: 12),
+                          child: Text(
+                            'Define cada cuánto suele comer el bebé',
+                            style: TextStyle(
+                              color: AppTheme.textLight,
+                              fontSize: 14,
+                              height: 1.35,
+                            ),
+                          ),
+                        ),
+                        Text(
+                          'Intervalo entre tomas',
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: AppTheme.textDark,
+                                height: 1.3,
+                              ),
+                        ),
+                        const SizedBox(height: 8),
+                        DropdownButtonFormField<int>(
+                          key: ValueKey(
+                            '${_baby!.expectedFeedingIntervalMinutes}_${_baby!.notifyNextFeeding}',
+                          ),
+                          initialValue: _intervalForDropdown(_baby!),
+                          decoration: InputDecoration(
+                            border: OutlineInputBorder(
+                              borderRadius:
+                                  BorderRadius.circular(AppTheme.fieldRadius),
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 10,
+                            ),
+                          ),
+                          items: kFeedingIntervalPresetMinutes
+                              .map(
+                                (m) => DropdownMenuItem(
+                                  value: m,
+                                  child: Text(feedingIntervalOptionLabel(m)),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (v) async {
+                            if (v == null) return;
+                            await _saveFeedingSchedule(
+                              intervalMinutes: v,
+                              notifyNextFeeding: _baby!.notifyNextFeeding,
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: Text(
+                            'Activar notificaciones',
+                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppTheme.textDark,
+                                ),
+                          ),
+                          subtitle: Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Text(
+                              'Al activarlo, te llegará una notificación cuando le toque la siguiente toma',
+                              style: const TextStyle(
+                                color: AppTheme.textLight,
+                                fontSize: 14,
+                                height: 1.35,
+                              ),
+                            ),
+                          ),
+                          value: _baby!.notifyNextFeeding,
+                          onChanged: (on) async {
+                            await _saveFeedingSchedule(
+                              intervalMinutes:
+                                  _baby!.expectedFeedingIntervalMinutes,
+                              notifyNextFeeding: on,
+                            );
+                          },
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  _SettingsCard(
+                    title: 'Cerrar sesión',
+                    leading: Icon(Icons.logout, color: AppTheme.primaryBlue, size: 24),
                     children: [
                       SizedBox(
                         width: double.infinity,
                         child: OutlinedButton.icon(
                           onPressed: _signOut,
-                          icon: Icon(
-                            Icons.logout,
-                            size: 18,
-                            color: Theme.of(context).colorScheme.error,
-                          ),
+                          icon: const Icon(Icons.logout, size: 18),
                           label: const Text('Cerrar sesión'),
                           style: OutlinedButton.styleFrom(
                             foregroundColor: Theme.of(context).colorScheme.error,
@@ -566,18 +712,15 @@ class _SettingsCard extends StatelessWidget {
   final String title;
   final Widget leading;
   final List<Widget> children;
-  final Color? titleColor;
 
   const _SettingsCard({
     required this.title,
     required this.leading,
     required this.children,
-    this.titleColor,
   });
 
   @override
   Widget build(BuildContext context) {
-    final titleCol = titleColor ?? AppTheme.textDark;
     return Card(
       margin: EdgeInsets.zero,
       child: Padding(
@@ -596,7 +739,7 @@ class _SettingsCard extends StatelessWidget {
                   title,
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.w600,
-                    color: titleCol,
+                    color: AppTheme.textDark,
                   ),
                 ),
               ],
