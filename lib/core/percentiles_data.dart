@@ -1,6 +1,6 @@
-/// Percentiles de peso por edad según estándares OMS (Weight-for-age).
-/// Valores en kg para niños y niñas de 0 a 12 meses.
-/// Fuente: WHO Child Growth Standards (2006).
+import 'who_lms.dart';
+
+/// Curvas de referencia OMS usadas en gráficas (P3…P97).
 enum WeightPercentile {
   p3,
   p15,
@@ -10,12 +10,20 @@ enum WeightPercentile {
 
   /// Texto compacto para etiquetas y selectores (e.g. "P3").
   String get shortLabel => switch (this) {
-        WeightPercentile.p3 => 'P3',
-        WeightPercentile.p15 => 'P15',
-        WeightPercentile.p50 => 'P50',
-        WeightPercentile.p85 => 'P85',
-        WeightPercentile.p97 => 'P97',
-      };
+    WeightPercentile.p3 => 'P3',
+    WeightPercentile.p15 => 'P15',
+    WeightPercentile.p50 => 'P50',
+    WeightPercentile.p85 => 'P85',
+    WeightPercentile.p97 => 'P97',
+  };
+
+  double get _zScore => switch (this) {
+    WeightPercentile.p3 => WhoLms.zP3,
+    WeightPercentile.p15 => WhoLms.zP15,
+    WeightPercentile.p50 => WhoLms.zP50,
+    WeightPercentile.p85 => WhoLms.zP85,
+    WeightPercentile.p97 => WhoLms.zP97,
+  };
 
   /// Valores ofrecidos al usuario en el selector.
   static const List<WeightPercentile> pickerValues = [
@@ -27,188 +35,181 @@ enum WeightPercentile {
   ];
 }
 
+/// Percentiles OMS (peso/talla por edad) vía método LMS oficial.
+///
+/// Si [isMale] es `null` (sexo no especificado), se usa la media de las
+/// tablas de niños y niñas (aproximación «mixta»).
+///
+/// El usuario solo ve etiquetas tipo `P16`; el cálculo interno usa z-score LMS.
 class PercentilesData {
-  /// Niños — peso (kg) por edad (meses completos) y percentil.
-  /// Aproximaciones a partir de WHO Child Growth Standards.
-  static const Map<WeightPercentile, Map<int, double>> _boys = {
-    WeightPercentile.p3: {
-      0: 2.5,
-      1: 3.4,
-      2: 4.4,
-      3: 5.1,
-      4: 5.6,
-      5: 6.1,
-      6: 6.4,
-      7: 6.7,
-      8: 7.0,
-      9: 7.2,
-      10: 7.5,
-      11: 7.7,
-      12: 7.8,
-    },
-    WeightPercentile.p15: {
-      0: 2.9,
-      1: 3.9,
-      2: 4.9,
-      3: 5.7,
-      4: 6.2,
-      5: 6.7,
-      6: 7.1,
-      7: 7.4,
-      8: 7.7,
-      9: 7.9,
-      10: 8.2,
-      11: 8.4,
-      12: 8.6,
-    },
-    WeightPercentile.p50: {
-      0: 3.3,
-      1: 4.5,
-      2: 5.6,
-      3: 6.4,
-      4: 7.0,
-      5: 7.5,
-      6: 7.9,
-      7: 8.3,
-      8: 8.6,
-      9: 8.9,
-      10: 9.2,
-      11: 9.4,
-      12: 9.6,
-    },
-    WeightPercentile.p85: {
-      0: 3.9,
-      1: 5.1,
-      2: 6.3,
-      3: 7.2,
-      4: 7.8,
-      5: 8.4,
-      6: 8.8,
-      7: 9.2,
-      8: 9.6,
-      9: 9.9,
-      10: 10.2,
-      11: 10.5,
-      12: 10.8,
-    },
-    WeightPercentile.p97: {
-      0: 4.3,
-      1: 5.7,
-      2: 7.0,
-      3: 7.9,
-      4: 8.6,
-      5: 9.2,
-      6: 9.7,
-      7: 10.2,
-      8: 10.5,
-      9: 10.9,
-      10: 11.2,
-      11: 11.5,
-      12: 11.8,
-    },
-  };
-
-  /// Niñas — peso (kg) por edad (meses completos) y percentil.
-  /// Aproximaciones a partir de WHO Child Growth Standards.
-  static const Map<WeightPercentile, Map<int, double>> _girls = {
-    WeightPercentile.p3: {
-      0: 2.4,
-      1: 3.2,
-      2: 3.9,
-      3: 4.5,
-      4: 5.0,
-      5: 5.4,
-      6: 5.7,
-      7: 6.0,
-      8: 6.3,
-      9: 6.5,
-      10: 6.7,
-      11: 6.9,
-      12: 7.0,
-    },
-    WeightPercentile.p15: {
-      0: 2.8,
-      1: 3.6,
-      2: 4.5,
-      3: 5.1,
-      4: 5.6,
-      5: 6.1,
-      6: 6.4,
-      7: 6.7,
-      8: 7.0,
-      9: 7.3,
-      10: 7.5,
-      11: 7.7,
-      12: 7.9,
-    },
-    WeightPercentile.p50: {
-      0: 3.2,
-      1: 4.2,
-      2: 5.1,
-      3: 5.8,
-      4: 6.4,
-      5: 6.9,
-      6: 7.3,
-      7: 7.6,
-      8: 7.9,
-      9: 8.2,
-      10: 8.5,
-      11: 8.7,
-      12: 8.9,
-    },
-    WeightPercentile.p85: {
-      0: 3.7,
-      1: 4.8,
-      2: 5.8,
-      3: 6.6,
-      4: 7.3,
-      5: 7.8,
-      6: 8.2,
-      7: 8.6,
-      8: 9.0,
-      9: 9.3,
-      10: 9.6,
-      11: 9.9,
-      12: 10.1,
-    },
-    WeightPercentile.p97: {
-      0: 4.2,
-      1: 5.4,
-      2: 6.5,
-      3: 7.4,
-      4: 8.1,
-      5: 8.7,
-      6: 9.2,
-      7: 9.6,
-      8: 10.0,
-      9: 10.4,
-      10: 10.7,
-      11: 11.0,
-      12: 11.3,
-    },
-  };
-
-  /// Devuelve el peso del percentil indicado para una edad en meses (0-12),
-  /// interpolando linealmente entre meses completos.
+  /// Peso (kg) de la curva de referencia [percentile] a [ageInMonths].
   static double getPercentileWeight(
-    bool isMale,
+    bool? isMale,
     WeightPercentile percentile,
     double ageInMonths,
   ) {
-    final table = isMale ? _boys[percentile]! : _girls[percentile]!;
-    if (ageInMonths <= 0) return table[0]!;
-    if (ageInMonths >= 12) return table[12]!;
-
-    final monthFloor = ageInMonths.floor();
-    final monthCeil = (ageInMonths.ceil()).clamp(0, 12);
-    final lower = table[monthFloor] ?? table[0]!;
-    final upper = table[monthCeil] ?? table[12]!;
-    final t = ageInMonths - monthFloor;
-
-    return lower + (upper - lower) * t;
+    return _valueForZ(
+          indicator: WhoLmsIndicator.weightForAge,
+          isMale: isMale,
+          ageInMonths: ageInMonths,
+          z: percentile._zScore,
+        ) ??
+        0;
   }
 
   /// Atajo histórico para el percentil 50 (mediana).
-  static double getP50Weight(bool isMale, double ageInMonths) =>
+  static double getP50Weight(bool? isMale, double ageInMonths) =>
       getPercentileWeight(isMale, WeightPercentile.p50, ageInMonths);
+
+  /// Longitud/talla (cm) de la curva de referencia [percentile].
+  static double getPercentileHeightCm(
+    bool? isMale,
+    WeightPercentile percentile,
+    double ageInMonths,
+  ) {
+    return _valueForZ(
+          indicator: WhoLmsIndicator.lengthForAge,
+          isMale: isMale,
+          ageInMonths: ageInMonths,
+          z: percentile._zScore,
+        ) ??
+        0;
+  }
+
+  /// Percentil OMS peso-para-edad (LMS). UI: [WeightForAgePercentileEstimate.shortLabel].
+  static WeightForAgePercentileEstimate? estimateWeightPercentile({
+    required bool? isMale,
+    required double ageInMonths,
+    required double weightKg,
+  }) {
+    return _estimate(
+      indicator: WhoLmsIndicator.weightForAge,
+      isMale: isMale,
+      ageInMonths: ageInMonths,
+      value: weightKg,
+    );
+  }
+
+  /// Percentil OMS talla-para-edad (LMS). UI: [WeightForAgePercentileEstimate.shortLabel].
+  static WeightForAgePercentileEstimate? estimateHeightPercentile({
+    required bool? isMale,
+    required double ageInMonths,
+    required double heightCm,
+  }) {
+    return _estimate(
+      indicator: WhoLmsIndicator.lengthForAge,
+      isMale: isMale,
+      ageInMonths: ageInMonths,
+      value: heightCm,
+    );
+  }
+
+  static double? _valueForZ({
+    required WhoLmsIndicator indicator,
+    required bool? isMale,
+    required double ageInMonths,
+    required double z,
+  }) {
+    if (isMale != null) {
+      return WhoLms.valueForZ(
+        indicator: indicator,
+        isMale: isMale,
+        ageInMonths: ageInMonths,
+        z: z,
+      );
+    }
+    final boys = WhoLms.valueForZ(
+      indicator: indicator,
+      isMale: true,
+      ageInMonths: ageInMonths,
+      z: z,
+    );
+    final girls = WhoLms.valueForZ(
+      indicator: indicator,
+      isMale: false,
+      ageInMonths: ageInMonths,
+      z: z,
+    );
+    if (boys == null || girls == null) return boys ?? girls;
+    return (boys + girls) / 2;
+  }
+
+  static WeightForAgePercentileEstimate? _estimate({
+    required WhoLmsIndicator indicator,
+    required bool? isMale,
+    required double ageInMonths,
+    required double value,
+  }) {
+    if (value <= 0 || ageInMonths < 0) return null;
+
+    final double? z;
+    if (isMale != null) {
+      z = WhoLms.zScore(
+        indicator: indicator,
+        isMale: isMale,
+        ageInMonths: ageInMonths,
+        x: value,
+      );
+    } else {
+      final zBoys = WhoLms.zScore(
+        indicator: indicator,
+        isMale: true,
+        ageInMonths: ageInMonths,
+        x: value,
+      );
+      final zGirls = WhoLms.zScore(
+        indicator: indicator,
+        isMale: false,
+        ageInMonths: ageInMonths,
+        x: value,
+      );
+      if (zBoys == null || zGirls == null) {
+        z = zBoys ?? zGirls;
+      } else {
+        z = (zBoys + zGirls) / 2;
+      }
+    }
+    if (z == null || z.isNaN) return null;
+
+    final percentile = WhoLms.percentileFromZ(z);
+    if (percentile < 3) {
+      return WeightForAgePercentileEstimate.belowTable(zScore: z);
+    }
+    if (percentile > 97) {
+      return WeightForAgePercentileEstimate.aboveTable(zScore: z);
+    }
+    return WeightForAgePercentileEstimate.at(percentile, zScore: z);
+  }
+}
+
+/// Resultado de estimación de percentil. La UI muestra [shortLabel] (`P16`).
+class WeightForAgePercentileEstimate {
+  final double? percentile;
+  final double? zScore;
+  final bool isBelowTable;
+  final bool isAboveTable;
+
+  const WeightForAgePercentileEstimate._({
+    this.percentile,
+    this.zScore,
+    this.isBelowTable = false,
+    this.isAboveTable = false,
+  });
+
+  const WeightForAgePercentileEstimate.belowTable({double? zScore})
+    : this._(isBelowTable: true, zScore: zScore);
+
+  const WeightForAgePercentileEstimate.aboveTable({double? zScore})
+    : this._(isAboveTable: true, zScore: zScore);
+
+  const WeightForAgePercentileEstimate.at(double value, {double? zScore})
+    : this._(percentile: value, zScore: zScore);
+
+  /// Etiqueta fácil para el usuario: `P16`, o `P3`/`P97` en extremos.
+  String shortLabel({int? roundTo}) {
+    if (isBelowTable) return 'P3';
+    if (isAboveTable) return 'P97';
+    final rounded = (percentile ?? 50).round().clamp(1, 99);
+    return 'P$rounded';
+  }
 }

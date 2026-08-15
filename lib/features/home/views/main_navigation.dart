@@ -1,5 +1,4 @@
 import 'dart:async';
-
 import 'package:control_bebe/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,12 +8,19 @@ import 'package:material_design_icons_flutter/material_design_icons_flutter.dart
 import '../../../core/models/feeding_record.dart';
 import '../../../core/providers/baby_profile_provider.dart';
 import '../../../core/providers/record_stream_providers.dart';
+import '../../../core/services/complimentary_premium_service.dart';
+import '../../../core/services/lactation_live_activity_service.dart';
+import '../../../core/services/lactation_timer_controller.dart';
 import '../../../core/services/next_feeding_notification_service.dart';
+import '../../../core/services/premium_expiry_warning_service.dart';
+import '../../../core/services/premium_launch_notice_service.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/premium_family_sync.dart';
 import '../../settings/views/settings_page.dart';
 import 'home_view.dart';
 import '../../diapers/views/diapers_view.dart';
 import '../../feeding/views/feeding_view.dart';
+import '../../sleep/views/sleep_view.dart';
 import '../../weight/views/weight_view.dart';
 
 class MainNavigation extends ConsumerStatefulWidget {
@@ -30,23 +36,72 @@ class _MainNavigationState extends ConsumerState<MainNavigation>
   final _homeScrollController = ScrollController();
   final _diapersScrollController = ScrollController();
   final _feedingScrollController = ScrollController();
+  final _sleepScrollController = ScrollController();
   final _weightScrollController = ScrollController();
 
   static const _scrollTopDuration = Duration(milliseconds: 300);
   static const _scrollTopCurve = Curves.easeOut;
 
+  static const _feedingTabIndex = 2;
+  static const _sleepTabIndex = 3;
+  static const _weightTabIndex = 4;
+
+  StreamSubscription<void>? _openFeedingFromNotificationSub;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    if (LactationLiveActivityService.consumePendingOpenFeeding()) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _goToFeedingTop());
+    }
+    _openFeedingFromNotificationSub = LactationLiveActivityService
+        .onOpenFeedingRequested
+        .listen((_) {
+          if (!mounted) return;
+          _goToFeedingTop();
+        });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_runPremiumLaunchFlow());
+    });
+  }
+
+  Future<void> _runPremiumLaunchFlow() async {
+    final grant = await ComplimentaryPremiumService.ensureFamilyGrant();
+    if (!mounted) return;
+    await PremiumLaunchNoticeService.tryShow(context, familyGrant: grant);
+    if (!mounted) return;
+    await PremiumExpiryWarningService.tryShow(context, ref);
+  }
+
+  void _goToFeedingTop() {
+    LactationLiveActivityService.consumePendingOpenFeeding();
+    if (_currentIndex == _feedingTabIndex) {
+      if (_feedingScrollController.hasClients) {
+        _feedingScrollController.animateTo(
+          0,
+          duration: _scrollTopDuration,
+          curve: _scrollTopCurve,
+        );
+      }
+      return;
+    }
+    setState(() => _currentIndex = _feedingTabIndex);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_feedingScrollController.hasClients) {
+        _feedingScrollController.jumpTo(0);
+      }
+    });
   }
 
   @override
   void dispose() {
+    _openFeedingFromNotificationSub?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     _homeScrollController.dispose();
     _diapersScrollController.dispose();
     _feedingScrollController.dispose();
+    _sleepScrollController.dispose();
     _weightScrollController.dispose();
     super.dispose();
   }
@@ -57,6 +112,11 @@ class _MainNavigationState extends ConsumerState<MainNavigation>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       NextFeedingNotificationService.syncFromStorage();
+      unawaited(LactationTimerController.reloadFromDisk());
+      unawaited(LactationLiveActivityService.syncForActiveTimer());
+      if (mounted) {
+        unawaited(PremiumExpiryWarningService.tryShow(context, ref));
+      }
     }
   }
 
@@ -105,6 +165,13 @@ class _MainNavigationState extends ConsumerState<MainNavigation>
           );
           break;
         case 3:
+          _sleepScrollController.animateTo(
+            0,
+            duration: _scrollTopDuration,
+            curve: _scrollTopCurve,
+          );
+          break;
+        case 4:
           _weightScrollController.animateTo(
             0,
             duration: _scrollTopDuration,
@@ -134,8 +201,10 @@ class _MainNavigationState extends ConsumerState<MainNavigation>
     if (!mounted) return;
     resetRecordHistoryFirestoreDays(ref);
     ref.invalidate(weightRecordsForChartStreamProvider);
+    ref.invalidate(heightRecordsStreamProvider);
     ref.invalidate(diaperRecordsStreamProvider);
     ref.invalidate(feedingRecordsStreamProvider);
+    ref.invalidate(sleepRecordsStreamProvider);
     await NextFeedingNotificationService.syncFromStorage();
   }
 
@@ -160,13 +229,19 @@ class _MainNavigationState extends ConsumerState<MainNavigation>
         onTitleTap: _goHome,
         onSettingsTap: _openSettings,
         scrollController: _feedingScrollController,
-        isActiveTab: _currentIndex == 2,
+        isActiveTab: _currentIndex == _feedingTabIndex,
+      ),
+      SleepView(
+        onTitleTap: _goHome,
+        onSettingsTap: _openSettings,
+        scrollController: _sleepScrollController,
+        isActiveTab: _currentIndex == _sleepTabIndex,
       ),
       WeightView(
         onTitleTap: _goHome,
         onSettingsTap: _openSettings,
         scrollController: _weightScrollController,
-        isActiveTab: _currentIndex == 3,
+        isActiveTab: _currentIndex == _weightTabIndex,
       ),
     ];
     return Scaffold(
@@ -174,22 +249,39 @@ class _MainNavigationState extends ConsumerState<MainNavigation>
         clipBehavior: Clip.hardEdge,
         children: [
           IndexedStack(index: _currentIndex, children: screens),
+          const PremiumFamilySync(),
           if (_currentIndex == 0 || _currentIndex == 2)
             const _FeedingStreamNotificationHook(),
         ],
       ),
-      bottomNavigationBar: Material(
-        elevation: 12,
-        shadowColor: Colors.black26,
-        color: Colors.transparent,
-        child: ClipRRect(
+      // Sombra suave hacia arriba (mismo lenguaje que las fichas de Inicio:
+      // elevation 0.5 + black12), sin filete sólido.
+      bottomNavigationBar: DecoratedBox(
+        decoration: BoxDecoration(
           borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-          child: Container(
-            decoration: const BoxDecoration(color: AppTheme.cardBackground),
-            // top: false — el inset superior es para el notch/status; no aplica a la barra inferior.
-            child: SafeArea(
-              top: false,
-              bottom: false,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.07),
+              blurRadius: 10,
+              offset: const Offset(0, -2),
+            ),
+          ],
+        ),
+        child: Material(
+          elevation: 0,
+          color: AppTheme.cardBackground,
+          clipBehavior: Clip.antiAlias,
+          shape: const RoundedRectangleBorder(
+            borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+          ),
+          // top: false — el inset superior es para el notch/status; no aplica a la barra inferior.
+          child: SafeArea(
+            top: false,
+            bottom: false,
+            // Las etiquetas van al límite de ancho: sin tope, el tamaño de letra
+            // del sistema las volvería a recortar.
+            child: MediaQuery.withClampedTextScaling(
+              maxScaleFactor: 1.2,
               child: Padding(
                 padding: EdgeInsets.fromLTRB(
                   4,
@@ -225,21 +317,32 @@ class _MainNavigationState extends ConsumerState<MainNavigation>
                       child: _NavItem(
                         fontAwesomeIcon: FontAwesomeIcons.utensils,
                         label: l10n.navFeeding,
-                        isSelected: _currentIndex == 2,
+                        isSelected: _currentIndex == _feedingTabIndex,
                         selectedBackground: AppTheme.navFeedingSelectedFill,
                         selectedForeground: AppTheme.navFeedingSelectedFg,
-                        onTap: () => _onTabTap(2),
+                        onTap: () => _onTabTap(_feedingTabIndex),
                       ),
                     ),
                     Expanded(
                       child: _NavItem(
-                        icon: Icons.monitor_weight_rounded,
-                        activeIcon: Icons.monitor_weight_rounded,
+                        icon: Icons.nightlight_round,
+                        activeIcon: Icons.nightlight_round,
+                        label: l10n.navSleep,
+                        isSelected: _currentIndex == _sleepTabIndex,
+                        selectedBackground: AppTheme.navSleepSelectedFill,
+                        selectedForeground: AppTheme.navSleepSelectedFg,
+                        onTap: () => _onTabTap(_sleepTabIndex),
+                      ),
+                    ),
+                    Expanded(
+                      child: _NavItem(
+                        icon: Icons.insights_rounded,
+                        activeIcon: Icons.insights_rounded,
                         label: l10n.navWeight,
-                        isSelected: _currentIndex == 3,
+                        isSelected: _currentIndex == _weightTabIndex,
                         selectedBackground: AppTheme.navWeightSelectedFill,
                         selectedForeground: AppTheme.navWeightSelectedFg,
-                        onTap: () => _onTabTap(3),
+                        onTap: () => _onTabTap(_weightTabIndex),
                       ),
                     ),
                   ],
@@ -259,14 +362,14 @@ class _FeedingStreamNotificationHook extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    ref.listen<AsyncValue<List<FeedingRecord>>>(
-      feedingRecordsStreamProvider,
-      (_, next) {
-        if (next is AsyncData<List<FeedingRecord>>) {
-          unawaited(NextFeedingNotificationService.syncFromStorage());
-        }
-      },
-    );
+    ref.listen<AsyncValue<List<FeedingRecord>>>(feedingRecordsStreamProvider, (
+      _,
+      next,
+    ) {
+      if (next is AsyncData<List<FeedingRecord>>) {
+        unawaited(NextFeedingNotificationService.syncFromStorage());
+      }
+    });
     return const SizedBox.shrink();
   }
 }
@@ -277,10 +380,10 @@ const double _kBottomNavIconSlotHeight = 32;
 /// Tamaño del glifo dentro de la ranura (FA suele verse más “pesado” a igual pt).
 const double _kBottomNavIconSizeFa = 22;
 
-/// Inicio, pañales y peso ([Icon] / MDI).
+/// Inicio, pañales, sueño y peso ([Icon] / MDI).
 const double _kBottomNavIconSizeMaterial = 26;
 
-/// Misma altura de cápsula en las cuatro pestañas (hueco repartido por [Expanded]).
+/// Misma altura de cápsula en las pestañas (hueco repartido por [Expanded]).
 const double _kNavPillHeight = 64;
 
 class _NavItem extends StatelessWidget {

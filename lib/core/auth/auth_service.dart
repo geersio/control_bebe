@@ -1,12 +1,16 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../db/storage_service.dart';
+
+enum AuthMethod { apple, google, email }
 
 class AuthService {
   static final FirebaseAuth _auth = FirebaseAuth.instance;
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  static const _lastAuthMethodKey = 'control_bebe.last_auth_method.v1';
 
   static User? get currentUser => _auth.currentUser;
 
@@ -15,8 +19,16 @@ class AuthService {
   static GoogleSignIn _createGoogleSignIn() => GoogleSignIn();
 
   /// Login con email y contraseña
-  static Future<UserCredential?> signInWithEmail(String email, String password) async {
-    return await _auth.signInWithEmailAndPassword(email: email, password: password);
+  static Future<UserCredential?> signInWithEmail(
+    String email,
+    String password,
+  ) async {
+    final result = await _auth.signInWithEmailAndPassword(
+      email: email,
+      password: password,
+    );
+    await _rememberAuthMethod(AuthMethod.email);
+    return result;
   }
 
   /// Envía correo de restablecimiento de contraseña (Firebase Auth).
@@ -35,18 +47,44 @@ class AuthService {
       accessToken: googleAuth.accessToken,
       idToken: googleAuth.idToken,
     );
-    return await _auth.signInWithCredential(credential);
+    final result = await _auth.signInWithCredential(credential);
+    await _rememberAuthMethod(AuthMethod.google);
+    return result;
   }
 
   /// Login con Apple
   static Future<UserCredential?> signInWithApple() async {
     final appleProvider = AppleAuthProvider();
-    return await _auth.signInWithProvider(appleProvider);
+    final result = await _auth.signInWithProvider(appleProvider);
+    await _rememberAuthMethod(AuthMethod.apple);
+    return result;
   }
 
   /// Registro con email y contraseña
-  static Future<UserCredential?> signUpWithEmail(String email, String password) async {
-    return await _auth.createUserWithEmailAndPassword(email: email, password: password);
+  static Future<UserCredential?> signUpWithEmail(
+    String email,
+    String password,
+  ) async {
+    final result = await _auth.createUserWithEmailAndPassword(
+      email: email,
+      password: password,
+    );
+    await _rememberAuthMethod(AuthMethod.email);
+    return result;
+  }
+
+  static Future<AuthMethod?> getLastAuthMethod() async {
+    final prefs = await SharedPreferences.getInstance();
+    final stored = prefs.getString(_lastAuthMethodKey);
+    for (final method in AuthMethod.values) {
+      if (method.name == stored) return method;
+    }
+    return null;
+  }
+
+  static Future<void> _rememberAuthMethod(AuthMethod method) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_lastAuthMethodKey, method.name);
   }
 
   /// Sesión de invitado (sin correo). Requiere tener "Anónimo" activado en Firebase Auth.
@@ -91,7 +129,12 @@ class AuthService {
 
       if (members.length <= 1) {
         // Único miembro: borrar toda la familia y sus subcolecciones
-        for (final sub in ['weight_records', 'diaper_records', 'feeding_records']) {
+        for (final sub in [
+          'weight_records',
+          'height_records',
+          'diaper_records',
+          'feeding_records',
+        ]) {
           final snap = await familyDoc.collection(sub).get();
           for (final doc in snap.docs) {
             await doc.reference.delete();

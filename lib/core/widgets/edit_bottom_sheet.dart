@@ -30,14 +30,14 @@ class EditBottomSheet extends StatelessWidget {
     return Container(
       decoration: const BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(AppTheme.dialogRadius)),
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(AppTheme.dialogRadius),
+        ),
       ),
       child: SafeArea(
         bottom: false,
         child: Padding(
-          padding: EdgeInsets.only(
-            bottom: _editSheetBottomPadding(context),
-          ),
+          padding: EdgeInsets.only(bottom: _editSheetBottomPadding(context)),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -58,14 +58,16 @@ class EditBottomSheet extends StatelessWidget {
                 child: Text(
                   title,
                   style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: AppTheme.textDark,
-                      ),
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.textDark,
+                  ),
                 ),
               ),
-              SingleChildScrollView(
-                padding: EditDialogTheme.contentPadding,
-                child: child,
+              Flexible(
+                child: SingleChildScrollView(
+                  padding: EditDialogTheme.contentPadding,
+                  child: child,
+                ),
               ),
               Padding(
                 padding: EditDialogTheme.bottomPadding,

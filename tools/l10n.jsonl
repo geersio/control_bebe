@@ -1,4 +1,4 @@
-{"key":"appTitle","es":"Mibebé","en":"My Baby Diary"}
+{"key":"appTitle","es":"MiBebé","en":"MiBebé"}
 {"key":"navHome","es":"INICIO","en":"HOME"}
 {"key":"navDiapers","es":"PAÑALES","en":"DIAPERS"}
 {"key":"navFeeding","es":"ALIMENTACIÓN","en":"FEEDING"}
@@ -199,7 +199,7 @@
 {"key":"loginResetInvalidEmail","es":"Introduce un correo válido","en":"Enter a valid email"}
 {"key":"loginResetCheckEmail","es":"Revisa tu correo (y spam) para restablecer la contraseña","en":"Check your email (and spam) to reset your password"}
 {"key":"loginResetSendFail","es":"No se pudo enviar el correo. Inténtalo más tarde.","en":"Could not send the email. Try again later."}
-{"key":"loginHeaderTitle","es":"Mibebé","en":"My Baby Diary"}
+{"key":"loginHeaderTitle","es":"MiBebé","en":"MiBebé"}
 {"key":"loginPasswordHint","es":"Tu contraseña","en":"Your password"}
 {"key":"loginForgotLink","es":"¿Has olvidado tu contraseña?","en":"Forgot your password?"}
 {"key":"loginValidatorEmailEmpty","es":"Introduce tu correo","en":"Enter your email"}
@@ -252,7 +252,7 @@
 {"key":"registerErrorTooMany","es":"Demasiados intentos. Espera unos minutos.","en":"Too many attempts. Wait a few minutes."}
 {"key":"registerErrorInvalidCredential","es":"Credenciales inválidas","en":"Invalid credentials"}
 {"key":"registerErrorUnknown","es":"Error: {code}. Revisa Firebase Console.","en":"Error: {code}. Check Firebase Console."}
-{"key":"onboardingWelcome","es":"Bienvenido a Mibebé","en":"Welcome to My Baby Diary"}
+{"key":"onboardingWelcome","es":"Bienvenido a MiBebé","en":"Welcome to MiBebé"}
 {"key":"onboardingHowStart","es":"¿Cómo quieres empezar?","en":"How would you like to start?"}
 {"key":"onboardingCreateBabyTitle","es":"Crear bebé","en":"Create baby"}
 {"key":"onboardingCreateBabySubtitle","es":"Configura un nuevo perfil desde cero","en":"Set up a new profile from scratch"}

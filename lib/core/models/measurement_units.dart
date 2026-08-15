@@ -1,4 +1,4 @@
-import 'dart:ui' show PlatformDispatcher;
+import 'dart:ui' show Locale, PlatformDispatcher;
 
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -21,26 +21,50 @@ enum LiquidUnitMode {
 class MeasurementPrefs {
   static const _kWeight = 'measurement_weight_unit';
   static const _kLiquid = 'measurement_liquid_unit';
+  static const _kCurrency = 'measurement_currency_code';
+
+  /// Países donde el sistema habitual es imperial (peso/volumen).
+  static const Set<String> _imperialCountryCodes = {
+    'US', // Estados Unidos
+    'LR', // Liberia
+    'MM', // Myanmar
+  };
 
   final WeightUnitMode weight;
   final LiquidUnitMode liquid;
 
+  /// Código ISO 4217 (p. ej. `EUR`). `null` = según locale del dispositivo.
+  final String? currencyCode;
+
   const MeasurementPrefs({
     required this.weight,
     required this.liquid,
+    this.currencyCode,
   });
 
-  static MeasurementPrefs defaultsForLanguage(String languageCode) {
-    final en = languageCode == 'en';
+  /// Imperial solo por país (no por idioma: en-AU / en-IN → métrico).
+  static bool regionUsesImperial([Locale? locale]) {
+    final loc = locale ?? PlatformDispatcher.instance.locale;
+    final country = (loc.countryCode ?? '').toUpperCase();
+    return _imperialCountryCodes.contains(country);
+  }
+
+  static MeasurementPrefs defaultsForLocale(Locale locale) {
+    final imperial = regionUsesImperial(locale);
     return MeasurementPrefs(
-      weight: en ? WeightUnitMode.imperial : WeightUnitMode.metric,
-      liquid: en ? LiquidUnitMode.fluidOuncesUs : LiquidUnitMode.milliliters,
+      weight: imperial ? WeightUnitMode.imperial : WeightUnitMode.metric,
+      liquid:
+          imperial ? LiquidUnitMode.fluidOuncesUs : LiquidUnitMode.milliliters,
     );
   }
 
+  /// Compatibilidad: sin país, asume métrico (salvo que se pase un Locale con country).
+  static MeasurementPrefs defaultsForLanguage(String languageCode) {
+    return defaultsForLocale(Locale(languageCode));
+  }
+
   static MeasurementPrefs defaultsForDispatcher() {
-    final code = PlatformDispatcher.instance.locale.languageCode;
-    return defaultsForLanguage(code);
+    return defaultsForLocale(PlatformDispatcher.instance.locale);
   }
 
   static Future<MeasurementPrefs> load() async {
@@ -48,6 +72,7 @@ class MeasurementPrefs {
     final def = defaultsForDispatcher();
     final wName = sp.getString(_kWeight);
     final lName = sp.getString(_kLiquid);
+    final currencyRaw = sp.getString(_kCurrency);
     WeightUnitMode w;
     LiquidUnitMode l;
     try {
@@ -60,21 +85,32 @@ class MeasurementPrefs {
     } catch (_) {
       l = def.liquid;
     }
-    return MeasurementPrefs(weight: w, liquid: l);
+    final currency = (currencyRaw == null || currencyRaw.isEmpty)
+        ? null
+        : currencyRaw.toUpperCase();
+    return MeasurementPrefs(weight: w, liquid: l, currencyCode: currency);
   }
 
   Future<void> save() async {
     final sp = await SharedPreferences.getInstance();
     await sp.setString(_kWeight, weight.name);
     await sp.setString(_kLiquid, liquid.name);
+    if (currencyCode == null || currencyCode!.isEmpty) {
+      await sp.remove(_kCurrency);
+    } else {
+      await sp.setString(_kCurrency, currencyCode!);
+    }
   }
 
   MeasurementPrefs copyWith({
     WeightUnitMode? weight,
     LiquidUnitMode? liquid,
+    String? currencyCode,
+    bool clearCurrency = false,
   }) =>
       MeasurementPrefs(
         weight: weight ?? this.weight,
         liquid: liquid ?? this.liquid,
+        currencyCode: clearCurrency ? null : (currencyCode ?? this.currencyCode),
       );
 }

@@ -13,13 +13,17 @@ import '../../../core/widgets/main_app_title_bar.dart';
 import '../../../core/theme/edit_dialog_theme.dart';
 import '../../../core/db/isar_service.dart';
 import '../../../core/providers/record_stream_providers.dart';
-import '../../../core/widgets/edit_dialog_fields.dart';
 import '../../../core/widgets/edit_bottom_sheet.dart';
+import '../../../core/widgets/edit_list_rows.dart';
+import '../../../core/widgets/inline_confirming_button.dart';
 import '../../../core/widgets/stream_record_load_error.dart';
 import '../../../core/widgets/confirm_delete_record_dialog.dart';
 import '../../../core/models/diaper_record.dart';
 import '../../../core/models/enums.dart';
 import '../../../core/utils/history_calendar_window.dart';
+import '../../../core/utils/history_highlight.dart';
+import '../../../core/widgets/history_entry_reveal.dart';
+import '../widgets/diaper_type_segmented_control.dart';
 
 class DiapersView extends ConsumerStatefulWidget {
   final VoidCallback? onTitleTap;
@@ -39,10 +43,24 @@ class DiapersView extends ConsumerStatefulWidget {
   ConsumerState<DiapersView> createState() => _DiapersViewState();
 }
 
-class _DiapersViewState extends ConsumerState<DiapersView> {
+class _DiapersViewState extends ConsumerState<DiapersView>
+    with HistoryHighlightState {
   DiaperType _selectedType = DiaperType.wet;
   DiaperRecord? _optimisticRecord;
+  DiaperRecord? _pendingHistoryReveal;
+  bool _awaitingHistoryReveal = false;
   DateTime _lastHistoryScrollExpand = DateTime.fromMillisecondsSinceEpoch(0);
+
+  List<DiaperRecord> _recordsForHistory(List<DiaperRecord> records) {
+    return _mergeOptimistic(
+      hidePendingHistoryRecord(
+        records: records,
+        awaitingReveal: _awaitingHistoryReveal,
+        pending: _pendingHistoryReveal,
+        matchesPending: HistoryHighlightKeys.diaperMatchesPending,
+      ),
+    );
+  }
 
   List<DiaperRecord> _mergeOptimistic(List<DiaperRecord> records) {
     final opt = _optimisticRecord;
@@ -98,9 +116,8 @@ class _DiapersViewState extends ConsumerState<DiapersView> {
 
   Widget _diaperHistoryColumn(
     BuildContext context,
-    List<DiaperRecord> records, {
-    required bool hasOlderOutsideWindow,
-  }) {
+    List<DiaperRecord> records,
+  ) {
     final l10n = AppLocalizations.of(context)!;
     final dateCode = dateFormatLanguageCode(context);
     final sorted = List<DiaperRecord>.from(records)
@@ -132,9 +149,7 @@ class _DiapersViewState extends ConsumerState<DiapersView> {
           Text(l10n.historyTitle, style: titleStyle),
           const SizedBox(height: 12),
           Text(
-            hasOlderOutsideWindow
-                ? l10n.historyScrollLoadMore
-                : l10n.diapersHistoryEmpty,
+            l10n.diapersHistoryEmpty,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
               color: AppTheme.textLight,
               height: 1.4,
@@ -172,13 +187,19 @@ class _DiapersViewState extends ConsumerState<DiapersView> {
             ),
             const SizedBox(height: 8),
             ...e.value.map(
-              (r) => _DiaperRecordTile(
-                record: r,
-                onDelete: () async {
-                  final ok = await confirmDeleteRecord(context);
-                  if (!context.mounted || !ok || r.id == null) return;
-                  IsarService.deleteDiaperRecord(r.id!);
-                },
+              (r) => HistoryEntryReveal(
+                highlighted: isHistoryHighlighted(
+                  HistoryHighlightKeys.diaper(r),
+                ),
+                accentColor: diaperHistoryAccent(r.type),
+                child: _DiaperRecordTile(
+                  record: r,
+                  onDelete: () async {
+                    final ok = await confirmDeleteRecord(context);
+                    if (!context.mounted || !ok || r.id == null) return;
+                    IsarService.deleteDiaperRecord(r.id!);
+                  },
+                ),
               ),
             ),
             const SizedBox(height: 16),
@@ -194,9 +215,6 @@ class _DiapersViewState extends ConsumerState<DiapersView> {
     final diaperRecordsAsync = widget.isActiveTab
         ? ref.watch(diaperRecordsStreamProvider)
         : ref.read(diaperRecordsStreamProvider);
-    final hasOlderAsync = widget.isActiveTab
-        ? ref.watch(hasOlderDiaperRecordsProvider)
-        : ref.read(hasOlderDiaperRecordsProvider);
     return Scaffold(
       backgroundColor: AppTheme.background,
       body: SafeArea(
@@ -208,129 +226,98 @@ class _DiapersViewState extends ConsumerState<DiapersView> {
               child: NotificationListener<ScrollNotification>(
                 onNotification: _onDiaperHistoryScrollNotification,
                 child: SingleChildScrollView(
-                controller: widget.scrollController,
-                padding: EdgeInsets.fromLTRB(
-                  AppTheme.screenEdgePadding,
-                  MainAppTitleBar.totalHeight +
-                      AppTheme.contentPaddingTopAfterTitleBar,
-                  AppTheme.screenEdgePadding,
-                  20 + AppTheme.safeBottomPadding(context),
-                ),
-                child: Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Row(
-                          children: [
-                            Icon(
-                              MdiIcons.humanBabyChangingTable,
-                              color: AppTheme.pageTitleIconDiapers,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              l10n.diapersTitle,
-                              style: Theme.of(context).textTheme.titleLarge
-                                  ?.copyWith(
-                                    fontWeight: FontWeight.bold,
-                                    color: AppTheme.textDark,
-                                  ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 24),
-                        Text(
-                          l10n.diapersChangeType,
-                          style: Theme.of(context).textTheme.titleSmall
-                              ?.copyWith(color: AppTheme.textLight),
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _TypeButton(
-                                label: l10n.diaperWet,
-                                icon: Icons.water_drop,
-                                selected: _selectedType == DiaperType.wet,
-                                onTap: () => setState(
-                                  () => _selectedType = DiaperType.wet,
-                                ),
+                  controller: widget.scrollController,
+                  padding: EdgeInsets.fromLTRB(
+                    AppTheme.screenEdgePadding,
+                    MainAppTitleBar.totalHeight +
+                        AppTheme.contentPaddingTopAfterTitleBar,
+                    AppTheme.screenEdgePadding,
+                    20 + AppTheme.safeBottomPadding(context),
+                  ),
+                  child: Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(
+                        AppTheme.sectionCardPadding,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(
+                                MdiIcons.humanBabyChangingTable,
+                                color: AppTheme.pageTitleIconDiapers,
                               ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: _TypeButton(
-                                label: l10n.diaperDirty,
-                                icon: FontAwesomeIcons.poo,
-                                selected: _selectedType == DiaperType.dirty,
-                                onTap: () => setState(
-                                  () => _selectedType = DiaperType.dirty,
-                                ),
-                                isFaIcon: true,
+                              const SizedBox(width: 8),
+                              Text(
+                                l10n.diapersTitle,
+                                style: Theme.of(context).textTheme.titleLarge
+                                    ?.copyWith(
+                                      fontWeight: FontWeight.bold,
+                                      color: AppTheme.textDark,
+                                    ),
                               ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: _TypeButton(
-                                label: l10n.diaperBoth,
-                                icon: Icons.sync,
-                                selected: _selectedType == DiaperType.both,
-                                onTap: () => setState(
-                                  () => _selectedType = DiaperType.both,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 24),
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            onPressed: _registerDiaper,
-                            child: Text(l10n.diapersRegisterButton),
+                            ],
                           ),
-                        ),
-                        const SizedBox(height: 32),
-                        diaperRecordsAsync.when(
-                          skipLoadingOnReload: true,
-                          data: (records) {
-                            final merged = _mergeOptimistic(records);
-                            final hasOlder = hasOlderAsync.maybeWhen(
-                              data: (v) => v,
-                              orElse: () => false,
-                            );
-                            return _diaperHistoryColumn(
-                              context,
-                              merged,
-                              hasOlderOutsideWindow: hasOlder,
-                            );
-                          },
-                          loading: () {
-                            if (_optimisticRecord != null) {
-                              return _diaperHistoryColumn(
-                                context,
-                                [_optimisticRecord!],
-                                hasOlderOutsideWindow: hasOlderAsync.maybeWhen(
-                                  data: (v) => v,
-                                  orElse: () => false,
-                                ),
+                          const SizedBox(height: 24),
+                          Text(
+                            l10n.diapersChangeType,
+                            style: Theme.of(context).textTheme.titleSmall
+                                ?.copyWith(color: AppTheme.textLight),
+                          ),
+                          const SizedBox(height: 12),
+                          DiaperTypeSegmentedControl(
+                            value: _selectedType,
+                            onChanged: (type) =>
+                                setState(() => _selectedType = type),
+                            wetLabel: l10n.diaperWet,
+                            dirtyLabel: l10n.diaperDirty,
+                            bothLabel: l10n.diaperBoth,
+                          ),
+                          const SizedBox(height: 24),
+                          SizedBox(
+                            width: double.infinity,
+                            child: InlineConfirmingButton(
+                              onPressed: _registerDiaper,
+                              onSavedVisible: _revealDiaperHistory,
+                              child: Text(l10n.diapersRegisterButton),
+                            ),
+                          ),
+                          const SizedBox(height: 32),
+                          diaperRecordsAsync.when(
+                            skipLoadingOnReload: true,
+                            data: (records) {
+                              final truncateDays = ref.watch(
+                                diaperHistoryFirestoreDaysProvider,
                               );
-                            }
-                            return const Center(
-                              child: CircularProgressIndicator(),
-                            );
-                          },
-                          error: (e, _) => StreamRecordLoadError(
-                            message: l10n.diapersStreamError,
-                            onRetry: () =>
-                                ref.invalidate(diaperRecordsStreamProvider),
+                              final visible = historyRecordsOnOrAfter(
+                                records,
+                                (r) => r.dateTime,
+                                historyWindowStartForDays(truncateDays),
+                              );
+                              final merged = _recordsForHistory(visible);
+                              return _diaperHistoryColumn(context, merged);
+                            },
+                            loading: () {
+                              if (_optimisticRecord != null) {
+                                return _diaperHistoryColumn(context, [
+                                  _optimisticRecord!,
+                                ]);
+                              }
+                              return const Center(
+                                child: CircularProgressIndicator(),
+                              );
+                            },
+                            error: (e, _) => StreamRecordLoadError(
+                              message: l10n.diapersStreamError,
+                              onRetry: () =>
+                                  ref.invalidate(diaperRecordsStreamProvider),
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
-                ),
                 ),
               ),
             ),
@@ -350,72 +337,25 @@ class _DiapersViewState extends ConsumerState<DiapersView> {
     );
   }
 
-  Future<void> _registerDiaper() async {
+  Future<bool> _registerDiaper() async {
     final record = DiaperRecord(type: _selectedType, dateTime: DateTime.now());
-    setState(() => _optimisticRecord = record);
+    setState(() {
+      _pendingHistoryReveal = record;
+      _awaitingHistoryReveal = true;
+    });
     await IsarService.addDiaperRecord(record);
+    return true;
   }
-}
 
-class _TypeButton extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final bool selected;
-  final VoidCallback onTap;
-  final bool isFaIcon;
-
-  const _TypeButton({
-    required this.label,
-    required this.icon,
-    required this.selected,
-    required this.onTap,
-    this.isFaIcon = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final iconColor = selected ? AppTheme.primaryBlue : AppTheme.textLight;
-    final surface = selected ? const Color(0xFFF5F5F5) : Colors.white;
-    final borderColor = selected
-        ? AppTheme.primaryBlue.withValues(alpha: 0.55)
-        : AppTheme.fieldBorder;
-    final borderWidth = selected ? 2.0 : 1.5;
-
-    return Material(
-      color: surface,
-      elevation: selected ? 2 : 1.5,
-      shadowColor: Colors.black.withValues(alpha: 0.18),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
-        side: BorderSide(color: borderColor, width: borderWidth),
-      ),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
-        splashColor: AppTheme.primaryBlue.withValues(alpha: 0.12),
-        highlightColor: AppTheme.primaryBlue.withValues(alpha: 0.06),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 6),
-          child: Column(
-            children: [
-              isFaIcon
-                  ? FaIcon(icon, size: 28, color: iconColor)
-                  : Icon(icon, size: 28, color: iconColor),
-              const SizedBox(height: 8),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-                  color: selected ? AppTheme.textDark : AppTheme.textLight,
-                ),
-                textAlign: TextAlign.center,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+  void _revealDiaperHistory() {
+    final record = _pendingHistoryReveal;
+    if (record == null) return;
+    markHistoryHighlight(HistoryHighlightKeys.diaper(record));
+    setState(() {
+      _optimisticRecord = record;
+      _awaitingHistoryReveal = false;
+      _pendingHistoryReveal = null;
+    });
   }
 }
 
@@ -432,12 +372,7 @@ class _DiaperRecordTile extends StatelessWidget {
   ) {
     final l10n = AppLocalizations.of(context)!;
     var selectedType = record.type;
-    var selectedDate = DateTime(
-      record.dateTime.year,
-      record.dateTime.month,
-      record.dateTime.day,
-    );
-    var selectedTime = TimeOfDay.fromDateTime(record.dateTime);
+    var selectedAt = record.dateTime;
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -456,80 +391,39 @@ class _DiaperRecordTile extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 10),
-              Row(
-                children: DiaperType.values.map((type) {
-                  final (icon, label, isFa) = switch (type) {
-                    DiaperType.wet => (Icons.water_drop, l10n.diaperWet, false),
-                    DiaperType.dirty => (
-                      FontAwesomeIcons.poo,
-                      l10n.diaperDirty,
-                      true,
-                    ),
-                    DiaperType.both => (Icons.sync, l10n.diaperBoth, false),
-                  };
-                  return Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.only(right: 4),
-                      child: InkWell(
-                        onTap: () => setState(() => selectedType = type),
-                        borderRadius: BorderRadius.circular(
-                          AppTheme.fieldRadius,
-                        ),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(vertical: 18),
-                          decoration: BoxDecoration(
-                            color: selectedType == type
-                                ? AppTheme.primaryBlue.withValues(alpha: 0.15)
-                                : AppTheme.fieldBackground,
-                            borderRadius: BorderRadius.circular(
-                              AppTheme.fieldRadius,
-                            ),
-                            border: Border.all(
-                              color: selectedType == type
-                                  ? AppTheme.primaryBlue.withValues(alpha: 0.2)
-                                  : AppTheme.fieldBorder,
-                              width: 1,
-                            ),
-                          ),
-                          child: Column(
-                            children: [
-                              isFa
-                                  ? FaIcon(icon, size: 24)
-                                  : Icon(icon, size: 24),
-                              const SizedBox(height: 6),
-                              Text(label, style: const TextStyle(fontSize: 12)),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  );
-                }).toList(),
+              DiaperTypeSegmentedControl(
+                value: selectedType,
+                onChanged: (type) => setState(() => selectedType = type),
+                wetLabel: l10n.diaperWet,
+                dirtyLabel: l10n.diaperDirty,
+                bothLabel: l10n.diaperBoth,
               ),
               SizedBox(height: EditDialogTheme.spacingBetweenSections),
-              DatePickerField(
-                value: selectedDate,
-                onChanged: (d) => setState(() => selectedDate = d),
-                lastDate: DateTime.now().add(const Duration(days: 1)),
-              ),
-              SizedBox(height: EditDialogTheme.spacingBetweenFields),
-              TimePickerField(
-                value: selectedTime,
-                onChanged: (t) => setState(() => selectedTime = t),
+              EditListCard(
+                children: [
+                  EditInstantRow.dateTime(
+                    context: context,
+                    label: l10n.commonDateTime,
+                    value: selectedAt,
+                    showDivider: false,
+                    onTap: () async {
+                      final picked = await pickEditDateTime(
+                        context,
+                        initial: selectedAt,
+                      );
+                      if (picked != null) {
+                        setState(() => selectedAt = picked);
+                      }
+                    },
+                  ),
+                ],
               ),
             ],
           ),
           onCancel: () => Navigator.pop(ctx),
           onSave: () async {
-            final dt = DateTime(
-              selectedDate.year,
-              selectedDate.month,
-              selectedDate.day,
-              selectedTime.hour,
-              selectedTime.minute,
-            );
             await IsarService.updateDiaperRecord(
-              record.copyWith(type: selectedType, dateTime: dt),
+              record.copyWith(type: selectedType, dateTime: selectedAt),
             );
             if (ctx.mounted) Navigator.pop(ctx);
           },
@@ -575,8 +469,7 @@ class _DiaperRecordTile extends StatelessWidget {
             children: [
               Container(
                 width: AppTheme.historyRecordStripeWidth,
-                decoration:
-                    AppTheme.historyRecordStripeDecoration(accentColor),
+                decoration: AppTheme.historyRecordStripeDecoration(accentColor),
               ),
               Padding(
                 padding: AppTheme.historyRecordLeadingPadding,

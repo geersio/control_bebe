@@ -37,16 +37,11 @@ class DatePickerField extends StatelessWidget {
           lastDate ?? DateTime.now().add(const Duration(days: 365)),
         );
         final day = _dateOnly(value);
-        final initial =
-            day.isBefore(min) ? min : (day.isAfter(max) ? max : day);
+        final initial = day.isBefore(min)
+            ? min
+            : (day.isAfter(max) ? max : day);
         final future = defaultTargetPlatform == TargetPlatform.iOS
-            ? showCupertinoDatePickerSheet(
-                context,
-                initial,
-                min,
-                max,
-                l10n,
-              )
+            ? showCupertinoDatePickerSheet(context, initial, min, max, l10n)
             : showDatePicker(
                 context: context,
                 initialDate: initial,
@@ -159,10 +154,7 @@ class TimePickerField extends StatelessWidget {
         if (!context.mounted) return;
         final future = defaultTargetPlatform == TargetPlatform.iOS
             ? _showCupertinoTimePicker(context, value, l10n)
-            : showTimePicker(
-                context: context,
-                initialTime: value,
-              );
+            : showTimePicker(context: context, initialTime: value);
         future.then((time) {
           if (!context.mounted) return;
           if (time != null) onChanged(time);
@@ -240,6 +232,92 @@ Future<TimeOfDay?> _showCupertinoTimePicker(
   );
 }
 
+DateTime _minutePrecision(DateTime dt) =>
+    DateTime(dt.year, dt.month, dt.day, dt.hour, dt.minute);
+
+/// Un solo instante: fecha + hora en una rueda (iOS) o sheet Cupertino (todas).
+Future<DateTime?> showDateTimePickerSheet(
+  BuildContext context, {
+  required DateTime initialDateTime,
+  DateTime? minimumDate,
+  DateTime? maximumDate,
+}) {
+  final l10n = AppLocalizations.of(context)!;
+  final min = minimumDate ?? DateTime(2020);
+  final max = maximumDate ?? DateTime.now().add(const Duration(days: 1));
+  var initial = _minutePrecision(initialDateTime);
+  if (initial.isBefore(min)) initial = min;
+  if (initial.isAfter(max)) initial = max;
+  return showCupertinoDateTimePickerSheet(context, initial, min, max, l10n);
+}
+
+/// Selector nativo de fecha+hora en un popup Cupertino.
+Future<DateTime?> showCupertinoDateTimePickerSheet(
+  BuildContext context,
+  DateTime initialDateTime,
+  DateTime minimumDate,
+  DateTime maximumDate,
+  AppLocalizations l10n,
+) {
+  var selected = _minutePrecision(initialDateTime);
+  return showCupertinoModalPopup<DateTime>(
+    context: context,
+    builder: (ctx) {
+      final bottom = MediaQuery.paddingOf(ctx).bottom;
+      return Container(
+        color: CupertinoColors.systemBackground.resolveFrom(ctx),
+        child: SafeArea(
+          top: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                height: 44,
+                decoration: BoxDecoration(
+                  border: Border(
+                    bottom: BorderSide(
+                      color: CupertinoColors.separator.resolveFrom(ctx),
+                    ),
+                  ),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    CupertinoButton(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      onPressed: () => Navigator.pop(ctx),
+                      child: Text(l10n.commonCancel),
+                    ),
+                    CupertinoButton(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      onPressed: () => Navigator.pop(ctx, selected),
+                      child: Text(l10n.commonDone),
+                    ),
+                  ],
+                ),
+              ),
+              SizedBox(
+                height: 216,
+                child: CupertinoDatePicker(
+                  mode: CupertinoDatePickerMode.dateAndTime,
+                  use24hFormat: MediaQuery.alwaysUse24HourFormatOf(ctx),
+                  initialDateTime: selected,
+                  minimumDate: minimumDate,
+                  maximumDate: maximumDate,
+                  onDateTimeChanged: (dt) {
+                    selected = _minutePrecision(dt);
+                  },
+                ),
+              ),
+              SizedBox(height: bottom),
+            ],
+          ),
+        ),
+      );
+    },
+  );
+}
+
 class _TapField extends StatelessWidget {
   final IconData icon;
   final String label;
@@ -261,9 +339,9 @@ class _TapField extends StatelessWidget {
         Text(
           label,
           style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                fontWeight: FontWeight.w600,
-                color: AppTheme.textDark,
-              ),
+            fontWeight: FontWeight.w600,
+            color: AppTheme.textDark,
+          ),
         ),
         const SizedBox(height: 10),
         Material(
@@ -286,12 +364,16 @@ class _TapField extends StatelessWidget {
                   Expanded(
                     child: Text(
                       value,
-                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                            color: AppTheme.textDark,
-                          ),
+                      style: Theme.of(
+                        context,
+                      ).textTheme.bodyLarge?.copyWith(color: AppTheme.textDark),
                     ),
                   ),
-                  Icon(Icons.chevron_right, color: AppTheme.textLight, size: 24),
+                  Icon(
+                    Icons.chevron_right,
+                    color: AppTheme.textLight,
+                    size: 24,
+                  ),
                 ],
               ),
             ),

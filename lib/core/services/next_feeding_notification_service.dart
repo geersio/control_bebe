@@ -34,7 +34,13 @@ class NextFeedingNotificationService {
     }
 
     const android = AndroidInitializationSettings('@mipmap/ic_launcher');
-    const ios = DarwinInitializationSettings();
+    // No pedir permiso aquí: iOS lo mostraría en el primer launch.
+    // Se solicita en onboarding (Activar) y en Ajustes.
+    const ios = DarwinInitializationSettings(
+      requestAlertPermission: false,
+      requestBadgePermission: false,
+      requestSoundPermission: false,
+    );
     await _plugin.initialize(
       const InitializationSettings(android: android, iOS: ios),
     );
@@ -88,7 +94,8 @@ class NextFeedingNotificationService {
     await cancelScheduled();
     final baby = await IsarService.getBabyProfile();
     final last = await IsarService.getLastFeedingRecord();
-    if (baby == null || last == null || !baby.notifyNextFeeding) return;
+    final notify = await IsarService.getNotifyNextFeeding();
+    if (baby == null || last == null || !notify) return;
 
     // No avisar de "próxima toma" mientras el cronómetro de pecho está en marcha.
     if (await IsarService.getActiveLactationTimer() != null) return;

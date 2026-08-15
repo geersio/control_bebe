@@ -4,23 +4,34 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:intl/intl.dart';
+import 'package:printing/printing.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'package:control_bebe/l10n/app_date_locale.dart';
 import 'package:control_bebe/l10n/app_localizations.dart';
 
 import '../../../core/auth/auth_service.dart';
+import '../../../core/auth/unauth_entry.dart';
 import '../../../core/db/isar_service.dart';
 import '../../../core/models/baby_profile.dart';
 import '../../../core/models/measurement_units.dart';
 import '../../../core/providers/baby_profile_provider.dart';
 import '../../../core/providers/measurement_prefs_provider.dart';
+import '../../../core/providers/notification_prefs_provider.dart';
+import '../../../core/providers/premium_provider.dart';
 import '../../../core/services/next_feeding_notification_service.dart';
+import '../../../core/services/purchases_service.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/feeding_interval_labels.dart';
+import '../../../core/utils/diaper_cost_localization.dart';
 import '../../../core/utils/measurement_display.dart';
 import '../../../core/widgets/edit_dialog_fields.dart';
+import '../../export/models/pediatric_report_data.dart';
+import '../../export/services/pediatric_report_service.dart';
+import '../../paywall/views/paywall_view.dart';
 
 class SettingsPage extends ConsumerStatefulWidget {
   final BabyProfile? initialBaby;
@@ -33,8 +44,11 @@ class SettingsPage extends ConsumerStatefulWidget {
 }
 
 class _SettingsPageState extends ConsumerState<SettingsPage> {
+  static const _supportEmail = 'sergiodz.r@gmail.com';
+
   BabyProfile? _baby;
   bool _deletingAccount = false;
+  bool _generatingReport = false;
 
   @override
   void initState() {
@@ -52,28 +66,11 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     setState(() => _baby = b);
   }
 
-  Future<void> _saveFeedingSchedule({
-    required int intervalMinutes,
-    required bool notifyNextFeeding,
-  }) async {
+  Future<void> _saveFeedingSchedule({required int intervalMinutes}) async {
     final b = _baby;
     if (b == null) return;
-    var notify = notifyNextFeeding;
-    if (notify) {
-      final ok = await NextFeedingNotificationService.requestPermissions();
-      if (!ok && mounted) {
-        final l10n = AppLocalizations.of(context)!;
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(l10n.settingsNotifyPermission)));
-        notify = false;
-      }
-    }
     final clamped = intervalMinutes.clamp(30, 720);
-    final updated = b.copyWith(
-      expectedFeedingIntervalMinutes: clamped,
-      notifyNextFeeding: notify,
-    );
+    final updated = b.copyWith(expectedFeedingIntervalMinutes: clamped);
     await IsarService.saveBabyProfile(updated);
     ref.invalidate(babyProfileProvider);
     await NextFeedingNotificationService.syncFromStorage();
@@ -84,19 +81,27 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   }
 
   Future<void> _editProfile() async {
-    final baby =
-        _baby ??
-        BabyProfile(
-          name: '',
-          isMale: true,
-          birthDate: DateTime.now().subtract(const Duration(days: 30)),
-        );
+    var baby = _baby;
+    if (baby == null) {
+      baby = await ref.read(babyProfileProvider.future);
+      if (mounted && baby != null) setState(() => _baby = baby);
+    }
+    if (!mounted) return;
+    if (baby == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.homeConfigureProfileFirst),
+        ),
+      );
+      return;
+    }
+    final profile = baby;
 
     final result = await showModalBottomSheet<BabyProfile?>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (ctx) => _EditProfileSheet(baby: baby),
+      builder: (ctx) => _EditProfileSheet(baby: profile),
     );
     if (result != null && mounted) {
       await IsarService.saveBabyProfile(result);
@@ -117,10 +122,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       l10n: l10n,
     );
     if (selected == null) return;
-    await _saveFeedingSchedule(
-      intervalMinutes: selected,
-      notifyNextFeeding: b.notifyNextFeeding,
-    );
+    await _saveFeedingSchedule(intervalMinutes: selected);
   }
 
   Future<void> _openWeightUnitSheet() async {
@@ -167,6 +169,64 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     await ref.read(measurementPrefsProvider.notifier).setLiquid(selected);
   }
 
+  Future<void> _openCurrencySheet() async {
+    final prefs = await ref.read(measurementPrefsProvider.future);
+    if (!mounted) return;
+    final autoCode = automaticCurrencyCode(moneyLocaleForContext(context));
+    // '' = automático (según dispositivo).
+    final selected = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => _CurrencyPickerSheet(
+        currentValue: prefs.currencyCode ?? '',
+        automaticCode: autoCode,
+      ),
+    );
+    if (selected == null) return;
+    await ref
+        .read(measurementPrefsProvider.notifier)
+        .setCurrency(selected.isEmpty ? null : selected);
+  }
+
+  Future<void> _sharePediatricReport() async {
+    if (_generatingReport) return;
+    final l10n = AppLocalizations.of(context)!;
+    setState(() => _generatingReport = true);
+    try {
+      final data = await PediatricReportData.load();
+      if (data == null) return;
+      final bytes = await PediatricReportService.buildPdf(
+        data: data,
+        l10n: l10n,
+      );
+      await Printing.sharePdf(
+        bytes: bytes,
+        filename: PediatricReportService.suggestedFileName(data, l10n),
+      );
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(l10n.reportShareError)));
+      }
+    } finally {
+      if (mounted) setState(() => _generatingReport = false);
+    }
+  }
+
+  /// Exportar el informe para el pediatra es premium: si no lo tiene,
+  /// abre el paywall en vez de generar el PDF.
+  Future<void> _onExportReportTap() async {
+    final isPremium = ref.read(isPremiumProvider);
+    if (isPremium) {
+      await _sharePediatricReport();
+      return;
+    }
+    await showAppPaywall(context);
+    ref.invalidate(customerInfoProvider);
+  }
+
   Future<void> _openShareFamilySheet() async {
     final familyId = await IsarService.getFamilyId();
     if (!mounted) return;
@@ -178,20 +238,74 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     );
   }
 
-  Future<void> _toggleNotify(bool on) async {
-    final b = _baby;
-    if (b == null) return;
-    final rollback = b;
+  /// Compartir por QR es premium: si no lo tiene, abre el paywall.
+  Future<void> _onShareFamilyTap() async {
+    final isPremium = ref.read(isPremiumProvider);
+    if (isPremium) {
+      await _openShareFamilySheet();
+      return;
+    }
+    await showAppPaywall(context);
+    ref.invalidate(customerInfoProvider);
+  }
 
-    setState(() {
-      _baby = b.copyWith(notifyNextFeeding: on);
-    });
+  Future<void> _openPaywall() async {
+    await showAppPaywall(context);
+    ref.invalidate(customerInfoProvider);
+  }
+
+  Future<void> _manageSubscription() async {
+    await PurchasesService.manageSubscriptions();
+  }
+
+  Future<void> _restorePurchases() async {
+    final l10n = AppLocalizations.of(context)!;
+    final ownPremium = ref.read(ownPremiumProvider);
+    final familyPaid = ref.read(familyPremiumProvider);
+    final familyGift = ref.read(familyComplimentaryPremiumProvider).valueOrNull;
+    final giftOnly =
+        (familyGift?.isActive ?? false) && !ownPremium && !familyPaid;
+
+    if (giftOnly) {
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppTheme.dialogRadius),
+          ),
+          title: Text(l10n.restorePurchasesGiftDialogTitle),
+          content: Text(l10n.restorePurchasesGiftDialogBody),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: Text(l10n.commonDone),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    final info = await PurchasesService.restorePurchases();
+    if (!mounted) return;
+    final restored = PurchasesService.isPremiumActive(info);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          restored ? l10n.restorePurchasesSuccess : l10n.restorePurchasesEmpty,
+        ),
+      ),
+    );
+    ref.invalidate(customerInfoProvider);
+  }
+
+  Future<void> _toggleNotify(bool on) async {
+    final previous = ref.read(notifyNextFeedingProvider).valueOrNull ?? false;
 
     var notify = on;
     if (notify) {
       final ok = await NextFeedingNotificationService.requestPermissions();
       if (!ok && mounted) {
-        setState(() => _baby = rollback);
         final l10n = AppLocalizations.of(context)!;
         ScaffoldMessenger.of(
           context,
@@ -200,17 +314,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       }
     }
 
-    final clamped = rollback.expectedFeedingIntervalMinutes.clamp(30, 720);
-    final updated = rollback.copyWith(
-      expectedFeedingIntervalMinutes: clamped,
-      notifyNextFeeding: notify,
-    );
-    await IsarService.saveBabyProfile(updated);
-    ref.invalidate(babyProfileProvider);
-    unawaited(NextFeedingNotificationService.syncFromStorage());
-    if (mounted) {
-      setState(() => _baby = updated);
-      widget.onProfileSaved?.call(updated);
+    await ref.read(notifyNextFeedingProvider.notifier).set(notify);
+    if (notify != previous) {
+      unawaited(NextFeedingNotificationService.syncFromStorage());
     }
   }
 
@@ -244,6 +350,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     setState(() => _deletingAccount = true);
     try {
       await AuthService.deleteAccount();
+      await ref.read(unauthEntryProvider.notifier).markLoginPreferred();
     } on Exception catch (e) {
       if (mounted) {
         setState(() => _deletingAccount = false);
@@ -286,6 +393,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     if (confirm == true) {
       try {
         await AuthService.signOut();
+        await ref.read(unauthEntryProvider.notifier).markLoginPreferred();
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(
@@ -300,11 +408,38 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     }
   }
 
+  Future<void> _openSupportEmail() async {
+    final l10n = AppLocalizations.of(context)!;
+    final subject = Uri.encodeComponent(l10n.settingsContactEmailSubject);
+    final uri = Uri.parse('mailto:$_supportEmail?subject=$subject');
+    try {
+      final launched = await launchUrl(
+        uri,
+        mode: LaunchMode.externalApplication,
+      );
+      if (launched || !mounted) return;
+    } catch (_) {}
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(l10n.settingsContactOpenFail(_supportEmail))),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final baby = _baby;
     final prefs = ref.watch(measurementPrefsProvider).valueOrNull;
+    final notifyNextFeeding =
+        ref.watch(notifyNextFeedingProvider).valueOrNull ?? false;
+    final isPremium = ref.watch(isPremiumProvider);
+    final ownPremium = ref.watch(ownPremiumProvider);
+    final familyPaid = ref.watch(familyPremiumProvider);
+    final familyGift = ref
+        .watch(familyComplimentaryPremiumProvider)
+        .valueOrNull;
+    final giftActive = familyGift?.isActive ?? false;
+    final showSubscription = PurchasesService.isReady;
 
     return Scaffold(
       backgroundColor: AppTheme.background,
@@ -338,6 +473,47 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   onTap: _editProfile,
                 ),
                 _SettingsRow(
+                  icon: Icons.picture_as_pdf_outlined,
+                  iconColor: AppTheme.palettePrimary,
+                  title: l10n.settingsRowPediatricReport,
+                  subtitle: l10n.settingsRowPediatricReportSubtitle,
+                  trailing: _generatingReport
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : isPremium
+                      ? const _RowChevron()
+                      : const _PremiumCrownTrailing(),
+                  onTap: (baby == null || _generatingReport)
+                      ? null
+                      : _onExportReportTap,
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+
+            // ========== PREFERENCIAS ==========
+            _SettingsGroup(
+              title: l10n.settingsGroupPreferences,
+              rows: [
+                _SettingsRow(
+                  icon: Icons.notifications_outlined,
+                  iconColor: AppTheme.palettePrimary,
+                  title: l10n.settingsRowFeedingNotify,
+                  subtitle: l10n.settingsNotifySubtitle,
+                  trailing: Switch.adaptive(
+                    value: notifyNextFeeding,
+                    activeThumbColor: AppTheme.palettePrimary,
+                    activeTrackColor: AppTheme.palettePrimary.withValues(
+                      alpha: 0.32,
+                    ),
+                    onChanged: _toggleNotify,
+                  ),
+                  onTap: () => _toggleNotify(!notifyNextFeeding),
+                ),
+                _SettingsRow(
                   icon: Icons.schedule_outlined,
                   iconColor: AppTheme.palettePrimary,
                   title: l10n.settingsRowFeedingInterval,
@@ -352,27 +528,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   ),
                   onTap: baby == null ? null : _openFeedingIntervalSheet,
                 ),
-                _SettingsRow(
-                  icon: Icons.notifications_outlined,
-                  iconColor: AppTheme.palettePrimary,
-                  title: l10n.settingsRowFeedingNotify,
-                  subtitle: l10n.settingsNotifySubtitle,
-                  trailing: Switch.adaptive(
-                    value: baby?.notifyNextFeeding ?? false,
-                    onChanged: baby == null ? null : _toggleNotify,
-                  ),
-                  onTap: baby == null
-                      ? null
-                      : () => _toggleNotify(!baby.notifyNextFeeding),
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-
-            // ========== PREFERENCIAS ==========
-            _SettingsGroup(
-              title: l10n.settingsGroupPreferences,
-              rows: [
                 _SettingsRow(
                   icon: Icons.monitor_weight_outlined,
                   iconColor: AppTheme.palettePrimary,
@@ -397,6 +552,20 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   ),
                   onTap: prefs == null ? null : _openLiquidUnitSheet,
                 ),
+                _SettingsRow(
+                  icon: Icons.payments_outlined,
+                  iconColor: AppTheme.palettePrimary,
+                  title: l10n.settingsRowCurrency,
+                  trailing: _RowValue(
+                    text: prefs == null
+                        ? l10n.settingsValueNotSet
+                        : (prefs.currencyCode == null
+                              ? l10n.settingsCurrencyAuto
+                              : currencyOptionLabel(prefs.currencyCode!)),
+                    chevron: true,
+                  ),
+                  onTap: prefs == null ? null : _openCurrencySheet,
+                ),
               ],
             ),
             const SizedBox(height: 20),
@@ -410,8 +579,83 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   iconColor: AppTheme.palettePrimary,
                   title: l10n.settingsRowFamilyShare,
                   subtitle: l10n.settingsRowFamilyShareSubtitle,
+                  trailing: isPremium
+                      ? const _RowChevron()
+                      : const _PremiumCrownTrailing(),
+                  onTap: _onShareFamilyTap,
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+
+            // ========== SUSCRIPCIÓN ==========
+            if (showSubscription) ...[
+              _SettingsGroup(
+                title: l10n.settingsGroupSubscription,
+                rows: [
+                  if (isPremium && ownPremium)
+                    _SettingsRow(
+                      icon: Icons.workspace_premium_rounded,
+                      iconColor: AppTheme.palettePrimary,
+                      title: l10n.settingsRowSubscriptionActive,
+                      subtitle: l10n.settingsRowManageSubscription,
+                      trailing: const _RowChevron(),
+                      onTap: _manageSubscription,
+                    )
+                  else if (isPremium && familyPaid)
+                    _SettingsRow(
+                      icon: Icons.workspace_premium_rounded,
+                      iconColor: AppTheme.palettePrimary,
+                      title: l10n.settingsRowSubscriptionFamily,
+                      trailing: null,
+                      onTap: null,
+                    )
+                  else if (isPremium && giftActive && familyGift != null)
+                    _SettingsRow(
+                      icon: Icons.card_giftcard_rounded,
+                      iconColor: AppTheme.palettePrimary,
+                      title: l10n.settingsRowComplimentaryPremium,
+                      subtitle: l10n.settingsRowComplimentaryPremiumUntil(
+                        DateFormat(
+                          'd MMM yyyy',
+                          dateFormatLanguageCode(context),
+                        ).format(familyGift.expiresAt),
+                      ),
+                      trailing: const _RowChevron(),
+                      onTap: _openPaywall,
+                    )
+                  else
+                    _SettingsRow(
+                      icon: Icons.workspace_premium_rounded,
+                      iconColor: AppTheme.palettePrimary,
+                      title: l10n.settingsRowSubscribe,
+                      subtitle: l10n.settingsRowSubscribeSubtitle,
+                      trailing: const _RowChevron(),
+                      onTap: _openPaywall,
+                    ),
+                  _SettingsRow(
+                    icon: Icons.restore_rounded,
+                    iconColor: AppTheme.palettePrimary,
+                    title: l10n.settingsRowRestorePurchases,
+                    trailing: const _RowChevron(),
+                    onTap: _restorePurchases,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+            ],
+
+            // ========== AYUDA ==========
+            _SettingsGroup(
+              title: l10n.settingsGroupHelp,
+              rows: [
+                _SettingsRow(
+                  icon: Icons.mail_outline,
+                  iconColor: AppTheme.palettePrimary,
+                  title: l10n.settingsRowContactTitle,
+                  subtitle: l10n.settingsRowContactSubtitle(_supportEmail),
                   trailing: const _RowChevron(),
-                  onTap: _openShareFamilySheet,
+                  onTap: _openSupportEmail,
                 ),
               ],
             ),
@@ -461,10 +705,7 @@ class _SettingsGroup extends StatelessWidget {
   final String title;
   final List<Widget> rows;
 
-  const _SettingsGroup({
-    required this.title,
-    required this.rows,
-  });
+  const _SettingsGroup({required this.title, required this.rows});
 
   @override
   Widget build(BuildContext context) {
@@ -542,15 +783,14 @@ class _SettingsRow extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         child: Row(
           children: [
-            Container(
+            SizedBox(
               width: 32,
               height: 32,
-              decoration: BoxDecoration(
-                color: iconColor.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(10),
+              child: Icon(
+                icon,
+                color: iconColor.withValues(alpha: isEnabled ? 0.72 : 0.45),
+                size: 24,
               ),
-              alignment: Alignment.center,
-              child: Icon(icon, color: iconColor, size: 18),
             ),
             const SizedBox(width: 14),
             Expanded(
@@ -579,10 +819,7 @@ class _SettingsRow extends StatelessWidget {
                 ],
               ),
             ),
-            if (trailing != null) ...[
-              const SizedBox(width: 12),
-              trailing!,
-            ],
+            if (trailing != null) ...[const SizedBox(width: 12), trailing!],
           ],
         ),
       ),
@@ -608,12 +845,20 @@ class _RowValue extends StatelessWidget {
             fontWeight: FontWeight.w500,
           ),
         ),
-        if (chevron) ...const [
-          SizedBox(width: 4),
-          _RowChevron(),
-        ],
+        if (chevron) ...const [SizedBox(width: 4), _RowChevron()],
       ],
     );
+  }
+}
+
+class _PremiumCrownTrailing extends StatelessWidget {
+  const _PremiumCrownTrailing();
+
+  static const _crownGold = Color(0xFFFFB300);
+
+  @override
+  Widget build(BuildContext context) {
+    return const FaIcon(FontAwesomeIcons.crown, size: 16, color: _crownGold);
   }
 }
 
@@ -638,9 +883,11 @@ class _SheetContainer extends StatelessWidget {
   final String title;
   final String? intro;
   final Widget child;
+
   /// Si es true, cabecera + [child] van en un [ListView] con [shrinkWrap] y
   /// altura máxima acotada (no rellena toda la pantalla en vacío).
   final bool scrollBody;
+
   /// Solo aplica cuando [scrollBody] es true (p. ej. teclado en hoja de edición).
   final ScrollViewKeyboardDismissBehavior keyboardDismissBehavior;
 
@@ -704,11 +951,12 @@ class _SheetContainer extends StatelessWidget {
               ? Builder(
                   builder: (context) {
                     final mq = MediaQuery.of(context);
-                    final maxH = (mq.size.height -
-                            mq.viewInsets.bottom -
-                            mq.padding.top -
-                            32)
-                        .clamp(240.0, 9000.0);
+                    final maxH =
+                        (mq.size.height -
+                                mq.viewInsets.bottom -
+                                mq.padding.top -
+                                32)
+                            .clamp(240.0, 9000.0);
                     return ConstrainedBox(
                       constraints: BoxConstraints(maxHeight: maxH),
                       child: ListView(
@@ -717,10 +965,7 @@ class _SheetContainer extends StatelessWidget {
                         physics: const ClampingScrollPhysics(),
                         keyboardDismissBehavior: keyboardDismissBehavior,
                         padding: EdgeInsets.zero,
-                        children: [
-                          ..._header(context),
-                          child,
-                        ],
+                        children: [..._header(context), child],
                       ),
                     );
                   },
@@ -728,10 +973,7 @@ class _SheetContainer extends StatelessWidget {
               : Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    ..._header(context),
-                    child,
-                  ],
+                  children: [..._header(context), child],
                 ),
         ),
       ),
@@ -763,6 +1005,7 @@ class _OptionPickerSheet<T> extends StatelessWidget {
     return _SheetContainer(
       title: title,
       intro: intro,
+      scrollBody: true,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -779,7 +1022,10 @@ class _OptionPickerSheet<T> extends StatelessWidget {
               onTap: () => Navigator.pop(context, options[i].value),
               borderRadius: BorderRadius.circular(8),
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 14),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 14,
+                ),
                 child: Row(
                   children: [
                     Expanded(
@@ -812,6 +1058,327 @@ class _OptionPickerSheet<T> extends StatelessWidget {
   }
 }
 
+/// Selector de moneda: buscador + lista scrollable con bandera, nombre,
+/// código y símbolo. El valor `''` representa el modo automático.
+class _CurrencyPickerSheet extends StatefulWidget {
+  final String currentValue;
+  final String automaticCode;
+
+  const _CurrencyPickerSheet({
+    required this.currentValue,
+    required this.automaticCode,
+  });
+
+  @override
+  State<_CurrencyPickerSheet> createState() => _CurrencyPickerSheetState();
+}
+
+class _CurrencyPickerSheetState extends State<_CurrencyPickerSheet> {
+  final _searchController = TextEditingController();
+  String _query = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  List<String> _filteredCodes(String languageCode) {
+    final codes = [...kSelectableCurrencyCodes]
+      ..sort(
+        (a, b) => normalizeForSearch(
+          currencyDisplayName(a, languageCode),
+        ).compareTo(normalizeForSearch(currencyDisplayName(b, languageCode))),
+      );
+    final query = normalizeForSearch(_query.trim());
+    if (query.isEmpty) return codes;
+    return codes
+        .where(
+          (code) =>
+              normalizeForSearch(code).contains(query) ||
+              normalizeForSearch(
+                currencyDisplayName(code, languageCode),
+              ).contains(query) ||
+              currencySymbolFor(code).contains(_query.trim()),
+        )
+        .toList();
+  }
+
+  Widget _searchField(AppLocalizations l10n) {
+    return TextField(
+      controller: _searchController,
+      onChanged: (value) => setState(() => _query = value),
+      textInputAction: TextInputAction.search,
+      style: Theme.of(context).textTheme.bodyMedium,
+      decoration: InputDecoration(
+        isDense: true,
+        hintText: l10n.settingsCurrencySearchHint,
+        hintStyle: Theme.of(
+          context,
+        ).textTheme.bodyMedium?.copyWith(color: AppTheme.textLight),
+        prefixIcon: const Icon(
+          CupertinoIcons.search,
+          size: 18,
+          color: AppTheme.textLight,
+        ),
+        prefixIconConstraints: const BoxConstraints(minWidth: 40),
+        suffixIcon: _query.isEmpty
+            ? null
+            : IconButton(
+                icon: const Icon(
+                  CupertinoIcons.clear_circled_solid,
+                  size: 18,
+                  color: AppTheme.textLight,
+                ),
+                onPressed: () {
+                  _searchController.clear();
+                  setState(() => _query = '');
+                },
+              ),
+        filled: true,
+        fillColor: AppTheme.fieldBackground,
+        contentPadding: const EdgeInsets.symmetric(vertical: 12),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppTheme.fieldRadius),
+          borderSide: BorderSide.none,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppTheme.fieldRadius),
+          borderSide: BorderSide.none,
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppTheme.fieldRadius),
+          borderSide: const BorderSide(color: AppTheme.palettePrimary),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final theme = Theme.of(context);
+    final languageCode = Localizations.localeOf(context).languageCode;
+    final mq = MediaQuery.of(context);
+    final query = _query.trim();
+    final codes = _filteredCodes(languageCode);
+    final showAuto =
+        query.isEmpty ||
+        normalizeForSearch(
+          l10n.settingsCurrencyAuto,
+        ).contains(normalizeForSearch(query));
+
+    final available =
+        mq.size.height - mq.padding.top - mq.viewInsets.bottom - 24;
+    final preferred = mq.size.height * 0.86;
+    final sheetHeight = (preferred < available ? preferred : available).clamp(
+      260.0,
+      double.infinity,
+    );
+
+    return Padding(
+      padding: EdgeInsets.only(bottom: mq.viewInsets.bottom),
+      child: Container(
+        height: sheetHeight,
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(
+            top: Radius.circular(AppTheme.dialogRadius),
+          ),
+        ),
+        child: SafeArea(
+          top: false,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const SizedBox(height: 12),
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: AppTheme.fieldBorder,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      l10n.settingsSheetCurrencyTitle,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.textHeading,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      l10n.settingsCurrencyIntro,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: AppTheme.textLight,
+                        height: 1.35,
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    _searchField(l10n),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 10),
+              Expanded(
+                child: (!showAuto && codes.isEmpty)
+                    ? Center(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 32),
+                          child: Text(
+                            l10n.settingsCurrencyNoResults(query),
+                            textAlign: TextAlign.center,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: AppTheme.textLight,
+                            ),
+                          ),
+                        ),
+                      )
+                    : ListView(
+                        padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+                        keyboardDismissBehavior:
+                            ScrollViewKeyboardDismissBehavior.onDrag,
+                        children: [
+                          if (showAuto)
+                            _CurrencyTile(
+                              leading: const Icon(
+                                CupertinoIcons.globe,
+                                size: 20,
+                                color: AppTheme.palettePrimary,
+                              ),
+                              title: l10n.settingsCurrencyAuto,
+                              subtitle: l10n.settingsCurrencyAutoSubtitle(
+                                currencyOptionLabel(widget.automaticCode),
+                              ),
+                              selected: widget.currentValue.isEmpty,
+                              onTap: () => Navigator.pop(context, ''),
+                            ),
+                          if (showAuto && codes.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(12, 14, 12, 6),
+                              child: Text(
+                                l10n.settingsCurrencyAllSection.toUpperCase(),
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                  color: AppTheme.textLight,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 0.6,
+                                ),
+                              ),
+                            ),
+                          for (final code in codes)
+                            _CurrencyTile(
+                              leading: Text(
+                                currencyFlagEmoji(code),
+                                style: const TextStyle(fontSize: 20),
+                              ),
+                              title: currencyDisplayName(code, languageCode),
+                              subtitle: '$code · ${currencySymbolFor(code)}',
+                              selected: widget.currentValue == code,
+                              onTap: () => Navigator.pop(context, code),
+                            ),
+                        ],
+                      ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CurrencyTile extends StatelessWidget {
+  final Widget leading;
+  final String title;
+  final String subtitle;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _CurrencyTile({
+    required this.leading,
+    required this.title,
+    required this.subtitle,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Ink(
+          decoration: BoxDecoration(
+            color: selected ? AppTheme.softPrimaryFill : Colors.transparent,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            child: Row(
+              children: [
+                Container(
+                  width: 38,
+                  height: 38,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: selected ? Colors.white : AppTheme.fieldBackground,
+                    shape: BoxShape.circle,
+                  ),
+                  child: leading,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: theme.textTheme.bodyLarge?.copyWith(
+                          fontWeight: selected
+                              ? FontWeight.w700
+                              : FontWeight.w500,
+                          color: selected
+                              ? AppTheme.palettePrimary
+                              : AppTheme.textDark,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: AppTheme.textLight,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (selected)
+                  const Icon(
+                    CupertinoIcons.checkmark_alt_circle_fill,
+                    color: AppTheme.palettePrimary,
+                    size: 22,
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// Picker estilo iOS (rueda) para el intervalo entre tomas.
 /// Dos columnas: horas (0..12) y minutos (0 o 30). Sin loop. El valor
 /// guardado se hace clamp(30, 720) en `_saveFeedingSchedule`.
@@ -826,8 +1393,7 @@ Future<int?> _showFeedingIntervalPicker(
   var selectedHours = (initialMinutes ~/ 60).clamp(0, maxHours);
   var selectedMinIndex = (initialMinutes % 60) >= 30 ? 1 : 0;
 
-  int currentTotal() =>
-      selectedHours * 60 + minuteOptions[selectedMinIndex];
+  int currentTotal() => selectedHours * 60 + minuteOptions[selectedMinIndex];
 
   return showCupertinoModalPopup<int>(
     context: context,
@@ -943,7 +1509,9 @@ class _ShareFamilySheet extends StatelessWidget {
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
                     color: Colors.white,
-                    borderRadius: BorderRadius.circular(AppTheme.homeCardRadius),
+                    borderRadius: BorderRadius.circular(
+                      AppTheme.homeCardRadius,
+                    ),
                     border: Border.all(color: AppTheme.fieldBorder),
                   ),
                   child: QrImageView(
@@ -965,10 +1533,9 @@ class _ShareFamilySheet extends StatelessWidget {
                 Text(
                   l10n.settingsQrCaption,
                   textAlign: TextAlign.center,
-                  style: Theme.of(context)
-                      .textTheme
-                      .bodySmall
-                      ?.copyWith(color: AppTheme.textLight),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(color: AppTheme.textLight),
                 ),
               ],
             )
@@ -992,8 +1559,7 @@ class _EditProfileSheet extends StatefulWidget {
 
 class _EditProfileSheetState extends State<_EditProfileSheet> {
   late final TextEditingController _nameController;
-  late final TextEditingController _heightController;
-  late bool _isMale;
+  late bool? _isMale;
   late DateTime _birthDate;
 
   @override
@@ -1001,9 +1567,6 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
     super.initState();
     final baby = widget.baby;
     _nameController = TextEditingController(text: baby.name);
-    _heightController = TextEditingController(
-      text: _formatHeight(baby.heightCm),
-    );
     _isMale = baby.isMale;
     _birthDate = baby.birthDate;
   }
@@ -1011,48 +1574,18 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
   @override
   void dispose() {
     _nameController.dispose();
-    _heightController.dispose();
     super.dispose();
   }
 
-  String _formatHeight(double? heightCm) {
-    if (heightCm == null) return '';
-    return heightCm == heightCm.roundToDouble()
-        ? '${heightCm.round()}'
-        : '$heightCm';
-  }
-
   void _save() {
-    final l10n = AppLocalizations.of(context)!;
-    final name = _nameController.text.trim();
+    final name = BabyProfile.sanitizeName(_nameController.text);
     if (name.isEmpty) return;
-
-    final heightRaw = _heightController.text.trim().replaceAll(',', '.');
-    double? heightCm;
-    if (heightRaw.isEmpty) {
-      heightCm = null;
-    } else {
-      heightCm = double.tryParse(heightRaw);
-      if (heightCm == null) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(l10n.heightInvalid)));
-        return;
-      }
-      if (heightCm < 25 || heightCm > 120) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(l10n.heightRangeError)));
-        return;
-      }
-    }
 
     final profile = widget.baby.copyWith(
       name: name,
       isMale: _isMale,
+      clearIsMale: _isMale == null,
       birthDate: _birthDate,
-      heightCm: heightCm,
-      setHeightCm: true,
     );
     Navigator.pop(context, profile);
   }
@@ -1087,10 +1620,12 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
               Expanded(
                 child: TextField(
                   controller: _nameController,
+                  maxLength: BabyProfile.maxNameLength,
                   decoration: const InputDecoration(
                     border: InputBorder.none,
                     isDense: true,
                     contentPadding: EdgeInsets.symmetric(vertical: 12),
+                    counterText: '',
                   ),
                   onTapOutside: (_) =>
                       FocusManager.instance.primaryFocus?.unfocus(),
@@ -1112,7 +1647,7 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
               child: _GenderChip(
                 label: l10n.commonGenderBoy,
                 icon: Icons.male_outlined,
-                selected: _isMale,
+                selected: _isMale == true,
                 onTap: () => setState(() => _isMale = true),
               ),
             ),
@@ -1121,47 +1656,17 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
               child: _GenderChip(
                 label: l10n.commonGenderGirl,
                 icon: Icons.female_outlined,
-                selected: !_isMale,
+                selected: _isMale == false,
                 onTap: () => setState(() => _isMale = false),
               ),
             ),
           ],
         ),
-        const SizedBox(height: 16),
-        Text(l10n.heightFieldLabel, style: labelStyle),
-        const SizedBox(height: 8),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-          decoration: fieldDecoration,
-          child: Row(
-            children: [
-              Icon(
-                Icons.straighten_outlined,
-                color: AppTheme.primaryBlue,
-                size: 22,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: TextField(
-                  controller: _heightController,
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
-                  ),
-                  decoration: InputDecoration(
-                    border: InputBorder.none,
-                    isDense: true,
-                    hintText: l10n.heightFieldHint,
-                    contentPadding: const EdgeInsets.symmetric(vertical: 12),
-                  ),
-                  onTapOutside: (_) =>
-                      FocusManager.instance.primaryFocus?.unfocus(),
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodyLarge?.copyWith(color: AppTheme.textDark),
-                ),
-              ),
-            ],
-          ),
+        const SizedBox(height: 10),
+        _GenderUnspecifiedOption(
+          label: l10n.commonGenderUnspecified,
+          selected: _isMale == null,
+          onTap: () => setState(() => _isMale = null),
         ),
         const SizedBox(height: 16),
         Text(l10n.settingsBirthDate, style: labelStyle),
@@ -1200,10 +1705,7 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
           },
           borderRadius: BorderRadius.circular(AppTheme.fieldRadius),
           child: Container(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 18,
-              vertical: 14,
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
             decoration: fieldDecoration,
             child: Row(
               children: [
@@ -1314,6 +1816,70 @@ class _GenderChip extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _GenderUnspecifiedOption extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _GenderUnspecifiedOption({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = selected ? AppTheme.primaryBlue : AppTheme.textLight;
+
+    return Semantics(
+      button: true,
+      selected: selected,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppTheme.fieldRadius),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 44),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 160),
+                  width: 20,
+                  height: 20,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(color: color, width: 2),
+                  ),
+                  alignment: Alignment.center,
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 160),
+                    width: selected ? 10 : 0,
+                    height: selected ? 10 : 0,
+                    decoration: const BoxDecoration(
+                      color: AppTheme.primaryBlue,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  label,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: selected ? AppTheme.primaryBlue : AppTheme.textLight,
+                    fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );

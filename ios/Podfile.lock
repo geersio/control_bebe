@@ -13,14 +13,23 @@ PODS:
     - Firebase/Firestore (= 11.15.0)
     - firebase_core
     - Flutter
+  - Firebase/Analytics (11.15.0):
+    - Firebase/Core
   - Firebase/Auth (11.15.0):
     - Firebase/CoreOnly
     - FirebaseAuth (~> 11.15.0)
+  - Firebase/Core (11.15.0):
+    - Firebase/CoreOnly
+    - FirebaseAnalytics (~> 11.15.0)
   - Firebase/CoreOnly (11.15.0):
     - FirebaseCore (~> 11.15.0)
   - Firebase/Firestore (11.15.0):
     - Firebase/CoreOnly
     - FirebaseFirestore (~> 11.15.0)
+  - firebase_analytics (11.6.0):
+    - Firebase/Analytics (= 11.15.0)
+    - firebase_core
+    - Flutter
   - firebase_auth (5.7.0):
     - Firebase/Auth (= 11.15.0)
     - firebase_core
@@ -28,6 +37,24 @@ PODS:
   - firebase_core (3.15.2):
     - Firebase/CoreOnly (= 11.15.0)
     - Flutter
+  - FirebaseAnalytics (11.15.0):
+    - FirebaseAnalytics/Default (= 11.15.0)
+    - FirebaseCore (~> 11.15.0)
+    - FirebaseInstallations (~> 11.0)
+    - GoogleUtilities/AppDelegateSwizzler (~> 8.1)
+    - GoogleUtilities/MethodSwizzler (~> 8.1)
+    - GoogleUtilities/Network (~> 8.1)
+    - "GoogleUtilities/NSData+zlib (~> 8.1)"
+    - nanopb (~> 3.30910.0)
+  - FirebaseAnalytics/Default (11.15.0):
+    - FirebaseCore (~> 11.15.0)
+    - FirebaseInstallations (~> 11.0)
+    - GoogleAppMeasurement/Default (= 11.15.0)
+    - GoogleUtilities/AppDelegateSwizzler (~> 8.1)
+    - GoogleUtilities/MethodSwizzler (~> 8.1)
+    - GoogleUtilities/Network (~> 8.1)
+    - "GoogleUtilities/NSData+zlib (~> 8.1)"
+    - nanopb (~> 3.30910.0)
   - FirebaseAppCheckInterop (11.15.0)
   - FirebaseAuth (11.15.0):
     - FirebaseAppCheckInterop (~> 11.0)
@@ -68,6 +95,11 @@ PODS:
     - FirebaseFirestoreGRPCCPPBinary (= 1.69.0)
     - leveldb-library (~> 1.22)
     - nanopb (~> 3.30910.0)
+  - FirebaseInstallations (11.15.0):
+    - FirebaseCore (~> 11.15.0)
+    - GoogleUtilities/Environment (~> 8.1)
+    - GoogleUtilities/UserDefaults (~> 8.1)
+    - PromisesObjC (~> 2.4)
   - FirebaseSharedSwift (11.15.0)
   - Flutter (1.0.0)
   - flutter_app_group_directory (0.0.1):
@@ -84,6 +116,32 @@ PODS:
     - FlutterMacOS
     - GoogleSignIn (~> 8.0)
     - GTMSessionFetcher (>= 3.4.0)
+  - GoogleAdsOnDeviceConversion (2.1.0):
+    - GoogleUtilities/Logger (~> 8.1)
+    - GoogleUtilities/Network (~> 8.1)
+    - nanopb (~> 3.30910.0)
+  - GoogleAppMeasurement/Core (11.15.0):
+    - GoogleUtilities/AppDelegateSwizzler (~> 8.1)
+    - GoogleUtilities/MethodSwizzler (~> 8.1)
+    - GoogleUtilities/Network (~> 8.1)
+    - "GoogleUtilities/NSData+zlib (~> 8.1)"
+    - nanopb (~> 3.30910.0)
+  - GoogleAppMeasurement/Default (11.15.0):
+    - GoogleAdsOnDeviceConversion (= 2.1.0)
+    - GoogleAppMeasurement/Core (= 11.15.0)
+    - GoogleAppMeasurement/IdentitySupport (= 11.15.0)
+    - GoogleUtilities/AppDelegateSwizzler (~> 8.1)
+    - GoogleUtilities/MethodSwizzler (~> 8.1)
+    - GoogleUtilities/Network (~> 8.1)
+    - "GoogleUtilities/NSData+zlib (~> 8.1)"
+    - nanopb (~> 3.30910.0)
+  - GoogleAppMeasurement/IdentitySupport (11.15.0):
+    - GoogleAppMeasurement/Core (= 11.15.0)
+    - GoogleUtilities/AppDelegateSwizzler (~> 8.1)
+    - GoogleUtilities/MethodSwizzler (~> 8.1)
+    - GoogleUtilities/Network (~> 8.1)
+    - "GoogleUtilities/NSData+zlib (~> 8.1)"
+    - nanopb (~> 3.30910.0)
   - GoogleSignIn (8.0.0):
     - AppAuth (< 2.0, >= 1.7.3)
     - AppCheckCore (~> 11.0)
@@ -98,6 +156,9 @@ PODS:
     - GoogleUtilities/Privacy
   - GoogleUtilities/Logger (8.1.0):
     - GoogleUtilities/Environment
+    - GoogleUtilities/Privacy
+  - GoogleUtilities/MethodSwizzler (8.1.0):
+    - GoogleUtilities/Logger
     - GoogleUtilities/Privacy
   - GoogleUtilities/Network (8.1.0):
     - GoogleUtilities/Logger
@@ -141,8 +202,16 @@ PODS:
     - FlutterMacOS
   - permission_handler_apple (9.3.0):
     - Flutter
+  - printing (1.0.0):
+    - Flutter
   - PromisesObjC (2.4.0)
+  - purchases_flutter (10.4.0):
+    - Flutter
+    - PurchasesHybridCommon (= 18.18.0)
+  - PurchasesHybridCommon (18.18.0):
+    - RevenueCat (= 5.80.0)
   - RecaptchaInterop (101.0.0)
+  - RevenueCat (5.80.0)
   - shared_preferences_foundation (0.0.1):
     - Flutter
     - FlutterMacOS
@@ -153,6 +222,7 @@ PODS:
 
 DEPENDENCIES:
   - cloud_firestore (from `.symlinks/plugins/cloud_firestore/ios`)
+  - firebase_analytics (from `.symlinks/plugins/firebase_analytics/ios`)
   - firebase_auth (from `.symlinks/plugins/firebase_auth/ios`)
   - firebase_core (from `.symlinks/plugins/firebase_core/ios`)
   - FirebaseFirestore (from `https://github.com/invertase/firestore-ios-sdk-frameworks.git`, tag `11.15.0`)
@@ -168,6 +238,8 @@ DEPENDENCIES:
   - mobile_scanner (from `.symlinks/plugins/mobile_scanner/darwin`)
   - path_provider_foundation (from `.symlinks/plugins/path_provider_foundation/darwin`)
   - permission_handler_apple (from `.symlinks/plugins/permission_handler_apple/ios`)
+  - printing (from `.symlinks/plugins/printing/ios`)
+  - purchases_flutter (from `.symlinks/plugins/purchases_flutter/ios`)
   - shared_preferences_foundation (from `.symlinks/plugins/shared_preferences_foundation/darwin`)
   - sign_in_with_apple (from `.symlinks/plugins/sign_in_with_apple/ios`)
   - url_launcher_ios (from `.symlinks/plugins/url_launcher_ios/ios`)
@@ -177,6 +249,7 @@ SPEC REPOS:
     - AppAuth
     - AppCheckCore
     - Firebase
+    - FirebaseAnalytics
     - FirebaseAppCheckInterop
     - FirebaseAuth
     - FirebaseAuthInterop
@@ -189,7 +262,10 @@ SPEC REPOS:
     - FirebaseFirestoreGRPCCoreBinary
     - FirebaseFirestoreGRPCCPPBinary
     - FirebaseFirestoreInternalBinary
+    - FirebaseInstallations
     - FirebaseSharedSwift
+    - GoogleAdsOnDeviceConversion
+    - GoogleAppMeasurement
     - GoogleSignIn
     - GoogleUtilities
     - GTMAppAuth
@@ -197,11 +273,15 @@ SPEC REPOS:
     - leveldb-library
     - nanopb
     - PromisesObjC
+    - PurchasesHybridCommon
     - RecaptchaInterop
+    - RevenueCat
 
 EXTERNAL SOURCES:
   cloud_firestore:
     :path: ".symlinks/plugins/cloud_firestore/ios"
+  firebase_analytics:
+    :path: ".symlinks/plugins/firebase_analytics/ios"
   firebase_auth:
     :path: ".symlinks/plugins/firebase_auth/ios"
   firebase_core:
@@ -233,6 +313,10 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/path_provider_foundation/darwin"
   permission_handler_apple:
     :path: ".symlinks/plugins/permission_handler_apple/ios"
+  printing:
+    :path: ".symlinks/plugins/printing/ios"
+  purchases_flutter:
+    :path: ".symlinks/plugins/purchases_flutter/ios"
   shared_preferences_foundation:
     :path: ".symlinks/plugins/shared_preferences_foundation/darwin"
   sign_in_with_apple:
@@ -250,8 +334,10 @@ SPEC CHECKSUMS:
   AppCheckCore: cc8fd0a3a230ddd401f326489c99990b013f0c4f
   cloud_firestore: 97e42181866db3cba3fe3935895ab779b6acacd6
   Firebase: d99ac19b909cd2c548339c2241ecd0d1599ab02e
+  firebase_analytics: bf93e20703c95030404d6ddbb1adf05bf5c3885b
   firebase_auth: 5342db41af2ba5ed32a6177d9e326eecbebda912
   firebase_core: 99a37263b3c27536063a7b601d9e2a49400a433c
+  FirebaseAnalytics: 6433dfd311ba78084fc93bdfc145e8cb75740eae
   FirebaseAppCheckInterop: 06fe5a3799278ae4667e6c432edd86b1030fa3df
   FirebaseAuth: a6575e5fbf46b046c58dc211a28a5fbdd8d4c83b
   FirebaseAuthInterop: 7087d7a4ee4bc4de019b2d0c240974ed5d89e2fd
@@ -265,6 +351,7 @@ SPEC CHECKSUMS:
   FirebaseFirestoreGRPCCoreBinary: 565534e160a0415d12185f7f171c52a567382fbd
   FirebaseFirestoreGRPCCPPBinary: 6c0134e8d230ee58b9d51dec2a30a48efd6d5dc7
   FirebaseFirestoreInternalBinary: ea89c368772c8fa4c9550a464b36c25796f6182c
+  FirebaseInstallations: 317270fec08a5d418fdbc8429282238cab3ac843
   FirebaseSharedSwift: e17c654ef1f1a616b0b33054e663ad1035c8fd40
   Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
   flutter_app_group_directory: d2c3337f424828558953172f9378d00df9b7756d
@@ -272,6 +359,8 @@ SPEC CHECKSUMS:
   flutter_native_splash: df59bb2e1421aa0282cb2e95618af4dcb0c56c29
   flutter_timezone: ac3da59ac941ff1c98a2e1f0293420e020120282
   google_sign_in_ios: 7411fab6948df90490dc4620ecbcabdc3ca04017
+  GoogleAdsOnDeviceConversion: 2be6297a4f048459e0ae17fad9bfd2844e10cf64
+  GoogleAppMeasurement: 700dce7541804bec33db590a5c496b663fbe2539
   GoogleSignIn: ce8c89bb9b37fb624b92e7514cc67335d1e277e4
   GoogleUtilities: 00c88b9a86066ef77f0da2fab05f65d7768ed8e1
   GTMAppAuth: f69bd07d68cd3b766125f7e072c45d7340dea0de
@@ -284,12 +373,16 @@ SPEC CHECKSUMS:
   nanopb: fad817b59e0457d11a5dfbde799381cd727c1275
   path_provider_foundation: 0b743cbb62d8e47eab856f09262bb8c1ddcfe6ba
   permission_handler_apple: 9878588469a2b0d0fc1e048d9f43605f92e6cec2
+  printing: 233e1b73bd1f4a05615548e9b5a324c98588640b
   PromisesObjC: f5707f49cb48b9636751c5b2e7d227e43fba9f47
+  purchases_flutter: 0d78f173515258a58dc14ee6e576bbe956d0f1ca
+  PurchasesHybridCommon: a5c81898ee5e1fa4a679c3c12e948ce3b4f4e341
   RecaptchaInterop: 11e0b637842dfb48308d242afc3f448062325aba
+  RevenueCat: f4427b8a1daa7a04a26cb20d60807aa818d9420b
   shared_preferences_foundation: 5086985c1d43c5ba4d5e69a4e8083a389e2909e6
   sign_in_with_apple: f3bf75217ea4c2c8b91823f225d70230119b8440
   url_launcher_ios: bb13df5870e8c4234ca12609d04010a21be43dfa
 
-PODFILE CHECKSUM: 46926b55c2402f6e3ffbc7d5887c673df1dcdf4a
+PODFILE CHECKSUM: 669f1fad734ae49a1a7d407655e6bb8c20a3ff98
 
 COCOAPODS: 1.16.2

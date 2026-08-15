@@ -1,13 +1,15 @@
 {
   "@@locale": "en",
-  "appTitle": "Baby Tracker",
+  "appTitle": "MiBebé",
   "navHome": "HOME",
   "navDiapers": "DIAPERS",
   "navFeeding": "FEEDING",
-  "navWeight": "WEIGHT",
+  "navSleep": "SLEEP",
+  "navWeight": "GROWTH",
   "commonCancel": "Cancel",
   "commonDone": "Done",
   "commonSave": "Save",
+  "commonSaved": "Saved",
   "commonRetry": "Retry",
   "commonDelete": "Delete",
   "deleteRecordConfirmTitle": "Delete this entry?",
@@ -15,10 +17,12 @@
   "commonEdit": "Edit",
   "commonDate": "Date",
   "commonTime": "Time",
+  "commonDateTime": "Date & time",
   "commonTimeStart": "Start time",
   "commonTimeEnd": "End time",
   "commonGenderBoy": "Boy",
   "commonGenderGirl": "Girl",
+  "commonGenderUnspecified": "Prefer not to say",
   "commonSend": "Send",
   "commonNext": "Next",
   "commonExit": "Exit",
@@ -40,6 +44,120 @@
   "feedingIntervalHoursN": "{n} hours",
   "feedingIntervalHoursMinutes": "{h}h {m}min",
   "profileDefaultBabyName": "Baby",
+  "sleepTitle": "Sleep",
+  "sleepBedtime": "Falls asleep",
+  "sleepWake": "Wakes up",
+  "sleepNightWakingsSection": "Night wakings",
+  "sleepClockModeStart": "Sleep start",
+  "sleepClockModeEnd": "Sleep end",
+  "sleepClockModeNightWaking": "Night waking",
+  "sleepClockCenterStartLabel": "Start time",
+  "sleepClockCenterEndLabel": "End time",
+  "sleepClockCenterNightWakingLabel": "Waking duration",
+  "sleepDurationCenterMinutesOnly": "{m} MIN",
+  "@sleepDurationCenterMinutesOnly": {
+    "placeholders": {
+      "m": {}
+    }
+  },
+  "sleepTypeNight": "Night sleep",
+  "sleepTypeNap": "Nap",
+  "sleepTypeNapNumbered": "Nap {number}",
+  "@sleepTypeNapNumbered": {
+    "placeholders": {
+      "number": {
+        "type": "int"
+      }
+    }
+  },
+  "sleepRegisterButton": "Save sleep",
+  "sleepRegisterStartButton": "Save start",
+  "sleepRegisterEndButton": "Save end",
+  "sleepRegisterNightWakingButton": "Save waking",
+  "sleepEndPending": "pending",
+  "sleepKeepOpenLabel": "Still sleeping",
+  "sleepNightWakingLabel": "Night waking",
+  "sleepWakingsSummary": "{count} wakings · {minutes} min awake",
+  "@sleepWakingsSummary": {
+    "placeholders": {
+      "count": {},
+      "minutes": {}
+    }
+  },
+  "sleepWakingsSummaryOne": "1 waking · {minutes} min awake",
+  "@sleepWakingsSummaryOne": {
+    "placeholders": {
+      "minutes": {}
+    }
+  },
+  "sleepNoOpenSessionToEnd": "No sleep in progress. Save the start first.",
+  "sleepOpenSessionExists": "A sleep is already in progress. Save the end or edit it in history.",
+  "homeSleepInsightSleepingLabel": "Sleeping...",
+  "homeSleepInsightSleepingSince": "since {time}",
+  "@homeSleepInsightSleepingSince": {
+    "placeholders": {
+      "time": {}
+    }
+  },
+  "homeSleepInsightSleepingValue": "{duration} · since {time}",
+  "@homeSleepInsightSleepingValue": {
+    "placeholders": {
+      "duration": {},
+      "time": {}
+    }
+  },
+  "sleepStatusAwake": "Awake",
+  "sleepStatusSleeping": "Sleeping",
+  "sleepActionFellAsleep": "Fell asleep",
+  "sleepActionWokeUp": "Woke up",
+  "sleepFellAsleepAt": "Fell asleep at {time}",
+  "@sleepFellAsleepAt": {
+    "placeholders": {
+      "time": {}
+    }
+  },
+  "sleepWokeUpAt": "Woke up at {time}",
+  "@sleepWokeUpAt": {
+    "placeholders": {
+      "time": {}
+    }
+  },
+  "sleepSavesWithCurrentTime": "saves with the current time · {time}",
+  "@sleepSavesWithCurrentTime": {
+    "placeholders": {
+      "time": {}
+    }
+  },
+  "sleepAddNightWaking": "Add night waking",
+  "sleepRegisterPastSleep": "Add previous sleep",
+  "sleepFellAsleepCaps": "FELL ASLEEP",
+  "sleepWokeUpCaps": "WOKE UP",
+  "sleepSleptPrefix": "Slept",
+  "sleepAwakePrefix": "Awake",
+  "sleepPastRegister": "Save",
+  "sleepHistoryEmpty": "No entries yet. Tap “Fell asleep” above to add the first one.",
+  "sleepStreamError": "Could not load sleep records. Retry or check your connection.",
+  "sleepEditRecord": "Edit sleep",
+  "sleepSessionCountOne": "1 sleep",
+  "sleepSessionCountN": "{n} sleeps",
+  "@sleepSessionCountN": {
+    "placeholders": {
+      "n": {}
+    }
+  },
+  "sleepDurationCenter": "{h} HR {m} MIN",
+  "@sleepDurationCenter": {
+    "placeholders": {
+      "h": {},
+      "m": {}
+    }
+  },
+  "sleepDurationCenterHoursOnly": "{h} HR",
+  "@sleepDurationCenterHoursOnly": {
+    "placeholders": {
+      "h": {}
+    }
+  },
   "profileWeightLabel": "WEIGHT",
   "profileHeightLabel": "HEIGHT",
   "babyAgeMonthsOneDaysOne": "1 MONTH, 1 DAY",
@@ -58,13 +176,261 @@
   "homeWeightNoRecords": "No weight entries. Tap to add the first one.",
   "homeWeightTrendGramsPerDay": "{sign}{value} g/day",
   "homeWeightTrendOuncesPerDay": "{sign}{value} oz/day",
+  "homeHeightTrendCmPerDay": "{sign}{value} cm/day",
+  "@homeHeightTrendCmPerDay": {
+    "placeholders": {
+      "sign": {},
+      "value": {}
+    }
+  },
   "homeWeightLast": "Last: {date}",
+  "homeSleepPattern": "{nights, plural, =0{0 nights} one{1 night} other{{nights} nights}} · {naps, plural, =0{0 naps} one{1 nap} other{{naps} naps}}",
+  "@homeSleepPattern": {
+    "placeholders": {
+      "nights": {
+        "type": "int"
+      },
+      "naps": {
+        "type": "int"
+      }
+    }
+  },
   "homeDiapersNoRecords": "No diaper changes. Tap to add the first one.",
   "homeDiapersWetDirty": "{wet} wet · {dirty} dirty",
   "homeDiaperChangesOne": "1 change",
   "homeDiaperChangesN": "{n} changes",
-  "homeTipTitle": "Tip of the day ✨",
+  "homeInsightsTitle": "Insights",
+  "homeFeedingDistributionTitle": "Feed distribution",
+  "homeFeedingDistributionSevenDayAverage": "≈ Last 7 days average",
+  "homeFeedingDistributionInfoTitle": "How feed distribution is calculated",
+  "homeFeedingDistributionInfoBody": "The chart shows the average proportion of breast, bottle, and solid feeds recorded over the last 7 days.\n\nTo compare feed types, breastfeeding minutes are converted into an approximate ml equivalent. This conversion is only a guide and does not represent an exact measurement of milk intake.",
+  "homeFeedingDistributionMlPerDay": "ml/day",
+  "homeDiaperSpendInsightTitle": "Diapers and spend",
+  "homeDiaperSpendInsightDiapersPerDay": "diapers / day",
+  "homeDiaperSpendInsightWeekDelta": "{delta} vs last week",
+  "homeDiaperSpendInsightMoreBadge": "More than last week",
+  "homeDiaperSpendInsightLessBadge": "Less than last week",
+  "homeDiaperSpendInsightSameBadge": "Same as last week",
+  "homeDiaperSpendInsightPerDay": "Per day",
+  "homeDiaperSpendInsightPerMonth": "Per month",
+  "homeDiaperSpendInsightMore": "{name} is using an average of {average} diapers per day. More than last week. That is approximately {cost} per day and {monthlyCost} per month.",
+  "homeDiaperSpendInsightLess": "{name} is using an average of {average} diapers per day. Less than last week. That is approximately {cost} per day and {monthlyCost} per month.",
+  "homeDiaperSpendInsightSame": "{name} is using an average of {average} diapers per day. Same as last week. That is approximately {cost} per day and {monthlyCost} per month.",
+  "homeDiaperSpendInsightNoData": "Log diapers for a few days to see the average and estimated daily cost.",
+  "homeDiaperSpendInsightAddFirst": "Add your baby's first diaper",
+  "homeDiaperSpendInsightInfoTitle": "Approximate calculation",
+  "homeDiaperSpendInsightInfoBody": "Spend is estimated using an average price of {price} per diaper. Diapers/day is the mean over the last 7 calendar days (total changes ÷ 7). The label shows the difference from the mean of the previous 7 days. Monthly spend projects that average over 30 days.",
+  "homeSleepInsightTitle": "Sleep analysis",
+  "homeTodaysSleepTitle": "Today's sleep",
+  "homeSleepInsightNextSleepLabel": "Next sleep time",
+  "homeSleepInsightAddFirstSleep": "Add your baby's first sleep",
+  "homeSleepInsightBedtimeLabel": "Next bedtime",
+  "homeSleepInsightNextSleepRelative": "In {duration}",
+  "@homeSleepInsightNextSleepRelative": {
+    "placeholders": {
+      "duration": {"type": "String"}
+    }
+  },
+  "homeSleepInsightNextSleepRelativePast": "{duration} ago",
+  "@homeSleepInsightNextSleepRelativePast": {
+    "placeholders": {
+      "duration": {"type": "String"}
+    }
+  },
+  "homeSleepInsightNextSleepValue": "{relative} · {window}",
+  "@homeSleepInsightNextSleepValue": {
+    "placeholders": {
+      "relative": {"type": "String"},
+      "window": {"type": "String"}
+    }
+  },
+  "homeSleepInsightEstimatedWindow": "Estimated window · {window}",
+  "@homeSleepInsightEstimatedWindow": {
+    "placeholders": {
+      "window": {"type": "String"}
+    }
+  },
+  "homeSleepInsightReasonShortNap": "Window shortened by {minutes} min after a short previous nap",
+  "@homeSleepInsightReasonShortNap": {
+    "placeholders": {
+      "minutes": {"type": "int"}
+    }
+  },
+  "homeSleepInsightReasonBedtime": "This window is for nighttime bedtime",
+  "homeSleepInsightReasonCatnap": "Bridge nap: daytime nap windows used up",
+  "homeSleepInsightReasonEarlyBedtime": "Early bedtime: daytime nap windows used up",
+  "homeSleepInsightReasonDefaultWake": "No records today: assuming a {time} wake-up",
+  "@homeSleepInsightReasonDefaultWake": {
+    "placeholders": {
+      "time": {"type": "String"}
+    }
+  },
+  "homeSleepInsightUsualAwakeBeforeNap": "{name} usually stays awake {duration} before this nap.",
+  "@homeSleepInsightUsualAwakeBeforeNap": {
+    "placeholders": {
+      "name": {"type": "String"},
+      "duration": {"type": "String"}
+    }
+  },
+  "homeSleepInsightUsualAwakeBeforeBedtime": "{name} usually stays awake {duration} before bedtime.",
+  "@homeSleepInsightUsualAwakeBeforeBedtime": {
+    "placeholders": {
+      "name": {"type": "String"},
+      "duration": {"type": "String"}
+    }
+  },
+  "homeSleepInsightAwakeNow": "Right now awake for {duration}.",
+  "@homeSleepInsightAwakeNow": {
+    "placeholders": {
+      "duration": {"type": "String"}
+    }
+  },
+  "homeSleepInsightPersonalizedHint": "Tuned to your baby’s rhythm",
+  "homeSleepInsightNoBirthDate": "Add the birth date in Settings to estimate the next sleep.",
+  "homeSleepInsightTodaySoFar": "so far today",
+  "homeSleepInsightUsuallySleeps": "Daily sleep average",
+  "homeSleepInsightLast7Days": "LAST 7 DAYS",
+  "homeSleepInsightAveragePrefix": "avg",
+  "homeSleepInsightChartToday": "today",
+  "homeSleepInsightDayTimelineToday": "Today",
+  "homeSleepInsightDayTimelineTotal": "{duration} total",
+  "@homeSleepInsightDayTimelineTotal": {
+    "placeholders": {
+      "duration": {
+        "type": "String"
+      }
+    }
+  },
+  "homeSleepInsightBarNoData": "No sleep logged",
+  "homeSleepSlotMorningNap": "Morning nap",
+  "homeSleepSlotMiddayNap": "Midday nap",
+  "homeSleepSlotAfternoonNap": "Afternoon nap",
+  "homeSleepSlotCatnap": "Catnap",
+  "homeSleepSlotNightSleep": "Night sleep",
+  "homeSleepDurationLabel": "Duration",
+  "homeSleepPatternHeaderLast14": "Usual schedule (last 14 days)",
+  "homeSleepSlotFrequencyCount": "{count} of {total}",
+  "@homeSleepSlotFrequencyCount": {
+    "placeholders": {
+      "count": { "type": "int" },
+      "total": { "type": "int" }
+    }
+  },
+  "homeSleepPhraseWaiting": "Not enough data yet",
+  "homeSleepPhraseFreqWithTime": "{days} of the last {total} days, around {time}",
+  "@homeSleepPhraseFreqWithTime": {
+    "placeholders": {
+      "days": { "type": "int" },
+      "total": { "type": "int" },
+      "time": { "type": "String" }
+    }
+  },
+  "homeSleepPhraseFreqOnly": "Only {days} of the last {total} days",
+  "@homeSleepPhraseFreqOnly": {
+    "placeholders": {
+      "days": { "type": "int" },
+      "total": { "type": "int" }
+    }
+  },
+  "homeSleepPhraseFreqPill": "Only {days} of the last {total} days",
+  "@homeSleepPhraseFreqPill": {
+    "placeholders": {
+      "days": { "type": "int" },
+      "total": { "type": "int" }
+    }
+  },
+  "homeSleepPhraseTrendFewerDays": "Happens on fewer days than last week",
+  "homeSleepPhraseTrendStartsLater": "Starts about {minutes} min later than last week",
+  "@homeSleepPhraseTrendStartsLater": {
+    "placeholders": {
+      "minutes": { "type": "int" }
+    }
+  },
+  "homeSleepPhraseTrendShorter": "Lasts less than last week",
+  "homeSleepPhraseAlmostAlways": "Almost always around {time}",
+  "@homeSleepPhraseAlmostAlways": {
+    "placeholders": {
+      "time": { "type": "String" }
+    }
+  },
+  "homeSleepPhraseUsuallyBetween": "Usually starts between {start} and {end}",
+  "@homeSleepPhraseUsuallyBetween": {
+    "placeholders": {
+      "start": { "type": "String" },
+      "end": { "type": "String" }
+    }
+  },
+  "homeSleepPhraseMayBetween": "May start between {start} and {end}",
+  "@homeSleepPhraseMayBetween": {
+    "placeholders": {
+      "start": { "type": "String" },
+      "end": { "type": "String" }
+    }
+  },
+  "homeSleepAbandonedNap": "{name} dropped this nap about two weeks ago",
+  "@homeSleepAbandonedNap": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "homeSleepInsightNoData": "Log sleep for a few days to see the analysis.",
+  "homeSleepInsightInfoTitle": "About this analysis",
+  "homeSleepInsightInfoIntro": "An approximate estimate—not an exact time or medical advice.",
+  "homeSleepInsightInfoPredictTitle": "Next sleep",
+  "homeSleepInsightInfoPredictBody": "It starts from the last wake (end of a nap or night sleep) and adds a wake window based on age and recent history. The time range reflects that variability.\n\nIf a sleep is in progress, you’ll see “Sleeping...” instead of a prediction.",
+  "homeSleepInsightInfoLoggingTitle": "How to log",
+  "homeSleepInsightInfoLoggingBody": "Mark sleep start and end. Nap vs night sleep is detected automatically.\n\nIf they wake overnight and settle back to sleep, use “Night waking” (not another nap).",
+  "homeSleepInsightInfoMetricsTitle": "Totals",
+  "homeSleepInsightInfoMetricsBody": "“Last 7 days” averages only days with logs (a day with no data is left out, not treated as 0). Today’s bar is striped.",
+  "homeSleepInsightInfoScheduleTitle": "Usual schedule",
+  "homeSleepInsightInfoScheduleBody": "Times for each nap and night sleep are the median over the last 14 days, rounded to 5-minute steps.\n\nThe pill next to the name shows how many of those 14 days included that nap (for example, 5 of 14).",
+  "homeTipTitle": "Tip of the day",
   "homeTipFallback": "Babies can recognize their caregiver's voice before birth. Calm talking helps build that bond.",
+  "homeFeedingTrendTitle": "TODAY'S FEEDING TRACK",
+  "homeFeedingTrendLearningDays": "{current}/{required} days",
+  "@homeFeedingTrendLearningDays": {
+    "placeholders": {
+      "current": {"type": "int"},
+      "required": {"type": "int"}
+    }
+  },
+  "homeFeedingTrendStatusLearning": "Learning...",
+  "homeFeedingTrendStatusBelow": "{name} is eating below usual for this time of day",
+  "@homeFeedingTrendStatusBelow": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "homeFeedingTrendStatusUsual": "{name} is eating as usual for this time of day",
+  "@homeFeedingTrendStatusUsual": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "homeFeedingTrendStatusAbove": "{name} is eating above usual for this time of day",
+  "@homeFeedingTrendStatusAbove": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "homeFeedingTrendStatusPhraseBelow": " is eating below usual for this time of day",
+  "homeFeedingTrendStatusPhraseUsual": " is eating as usual for this time of day",
+  "homeFeedingTrendStatusPhraseAbove": " is eating above usual for this time of day",
+  "homeFeedingTrendHintBelow": "below usual",
+  "homeFeedingTrendHintLearning": "learning",
+  "homeFeedingTrendHintUsual": "usual at this time",
+  "homeFeedingTrendHintAbove": "above usual",
+  "homeFeedingTrendTodayTotal": "today so far",
+  "homeFeedingTrendUsuallyStill": "usually still takes",
+  "homeFeedingTrendInfoTitle": "How this tracker works",
+  "homeFeedingTrendInfoBody": "We use the last 14 days of feeds as a reference (bottle and breast; solids aren’t included). At least 2 days with feeds are needed before we leave “learning” and can compare.\n\nAt this time of day, we compare today’s total so far with the usual range from those days: below usual, as usual, or above usual.\n\n“Usually still takes” is an estimate: the median of what they typically reach by end of day, minus what they’ve already taken today.\n\nBreastfeeding can’t be measured in ml like a bottle, so we turn nursing minutes into an approximate equivalent. These figures are a guide, not exact measurements. If anything seems off, check with your pediatrician.",
+  "homeFeedingTrendInfoButton": "Got it",
   "sabiasQueNoBirthDate": "Add your baby's birth date in settings to see age-matched tips.",
   "homeConfigureProfileFirst": "Set up your baby's profile in Settings first",
   "homePickPhoto": "Choose photo",
@@ -101,6 +467,8 @@
   "feedingChooseSideSubtitle": "Pick a side to start the timer.",
   "feedingEditSolid": "Edit solids",
   "feedingStop": "Stop",
+  "feedingPause": "Pause",
+  "feedingResume": "Resume",
   "feedingActiveTimer": "Timer running: {side}",
   "feedingSideLeft": "Left",
   "feedingSideRight": "Right",
@@ -137,13 +505,26 @@
   "weightRegister": "Log",
   "weightValidatorEmpty": "Enter weight",
   "weightValidatorInvalid": "Invalid weight",
+  "weightSuddenChangeHint": "This is a big change from the last weight ({value}). Please double-check.",
+  "@weightSuddenChangeHint": {
+    "placeholders": {
+      "value": { "type": "String" }
+    }
+  },
   "weightStreamError": "Could not load weights. Check connection or retry.",
-  "weightEvolution": "Trend",
-  "weightChartCaption": "Reference line weight-for-age (WHO).",
+  "growthChartMetricWeight": "Weight",
+  "growthChartMetricHeight": "Height",
+  "growthEvolution": "Weight and height trend",
+  "weightEvolution": "Weight trend",
+  "weightChartCaption": "WHO reference (weight-for-age).",
+  "weightChartBabyCaption": "Baby weigh-ins",
+  "weightChartRangeSelector": "Range",
   "weightChartSource": "Source: World Health Organization (WHO) — Child Growth Standards. who.int/tools/child-growth-standards",
+  "weightChartInfoTitle": "Chart source",
   "weightChartLoadError": "Could not load the weight chart.",
   "weightHistoryLoadError": "Could not load weight history.",
   "weightHistoryEmpty": "No entries yet. Enter weight and tap “Log” above to add the first one.",
+  "growthHistoryEmpty": "No entries yet. Enter weight or height and tap “Log” to add the first one.",
   "weightCurrentCard": "Current weight",
   "weightTrendCard": "Daily trend",
   "weightTrendGramsCompact": "{sign}{value}g",
@@ -152,11 +533,35 @@
   "weightDash": "-",
   "weightChartEmpty": "No data yet",
   "weightChartNoDataInRange": "No weigh-ins in this period",
+  "weightChartNeedsMoreRecords": "Add one more weigh-in to calculate {name}'s growth line.",
+  "@weightChartNeedsMoreRecords": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
   "weightChartRangeAll": "All",
   "weightChartRange7d": "7 days",
   "weightChartRange30d": "30 days",
   "weightChartRange90d": "3 months",
   "weightChartRange365d": "1 year",
+  "weightTooltipAge": "Age: {age}",
+  "@weightTooltipAge": {
+    "placeholders": {
+      "age": { "type": "String" }
+    }
+  },
+  "weightTooltipBabyPercentile": "WHO percentile (weight/age): {value}",
+  "@weightTooltipBabyPercentile": {
+    "placeholders": {
+      "value": { "type": "String" }
+    }
+  },
+  "heightTooltipBabyPercentile": "WHO percentile (length/age): {value}",
+  "@heightTooltipBabyPercentile": {
+    "placeholders": {
+      "value": { "type": "String" }
+    }
+  },
   "weightTooltipPercentile": "{label} (WHO): {value}",
   "@weightTooltipPercentile": {
     "placeholders": {
@@ -166,10 +571,80 @@
   },
   "weightTooltipWeighIn": "Weigh-in: {value}",
   "weightChartPercentileSelector": "Percentile",
+  "weightChartBabyPercentileAt": "{name} is at the {percentile} percentile",
+  "@weightChartBabyPercentileAt": {
+    "placeholders": {
+      "name": { "type": "String" },
+      "percentile": { "type": "String" }
+    }
+  },
+  "weightChartBabyPercentileAbove": "{name} is above the {percentile} percentile",
+  "@weightChartBabyPercentileAbove": {
+    "placeholders": {
+      "name": { "type": "String" },
+      "percentile": { "type": "String" }
+    }
+  },
+  "weightChartBabyPercentileBelow": "{name} is below the {percentile} percentile",
+  "@weightChartBabyPercentileBelow": {
+    "placeholders": {
+      "name": { "type": "String" },
+      "percentile": { "type": "String" }
+    }
+  },
+  "weightChartPercentilePhraseBeforeAt": " is at the ",
+  "weightChartPercentilePhraseAfterAt": " percentile",
+  "weightChartPercentilePhraseBeforeAbove": " is above the ",
+  "weightChartPercentilePhraseAfterAbove": " percentile",
+  "weightChartPercentilePhraseBeforeBelow": " is below the ",
+  "weightChartPercentilePhraseAfterBelow": " percentile",
   "weightEditTitle": "Edit weight",
+  "heightTitle": "Height log",
+  "hintExampleHeight": "e.g. 58",
+  "heightRegister": "Log",
+  "heightValidatorEmpty": "Enter height",
+  "heightValidatorInvalid": "Invalid height",
+  "heightSuddenChangeHint": "This is a big change from the last height ({value}). Please double-check.",
+  "@heightSuddenChangeHint": {
+    "placeholders": {
+      "value": { "type": "String" }
+    }
+  },
+  "heightHistoryLoadError": "Could not load height history.",
+  "heightEditTitle": "Edit height",
+  "heightEvolution": "Height trend",
+  "heightChartCaption": "WHO reference (length/height-for-age).",
+  "heightChartBabyCaption": "Baby height measures",
+  "heightChartLoadError": "Could not load the height chart.",
+  "heightChartEmpty": "No heights yet",
+  "heightChartNoDataInRange": "No height measures in this period",
+  "heightChartNeedsMoreRecords": "Add one more height measure to calculate {name}'s growth line.",
+  "@heightChartNeedsMoreRecords": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "heightTooltipMeasure": "Height: {value}",
+  "@heightTooltipMeasure": {
+    "placeholders": {
+      "value": { "type": "String" }
+    }
+  },
   "bottleTitle": "Bottle",
   "bottleValidatorEmpty": "Enter amount",
   "bottleValidatorInvalid": "Invalid amount",
+  "bottleQuickAmountsSectionTitle": "Quick amounts",
+  "bottleQuickAmountAdd": "Add",
+  "bottleQuickAmountAddTitle": "Add shortcut",
+  "bottleQuickAmountDuplicate": "That amount is already in the list",
+  "bottleQuickAmountMaxCustom": "Maximum custom shortcuts reached",
+  "bottleQuickAmountRemoveTitle": "Remove shortcut",
+  "bottleQuickAmountRemoveMessage": "Remove {amount} from your shortcuts?",
+  "@bottleQuickAmountRemoveMessage": {
+    "placeholders": {
+      "amount": { "type": "String" }
+    }
+  },
   "settingsTitle": "Settings",
   "settingsBabyProfile": "Baby profile",
   "settingsShareFamily": "Share family",
@@ -179,7 +654,7 @@
   "settingsHeight": "Height",
   "settingsNoProfile": "No profile configured",
   "settingsEditProfile": "Edit profile",
-  "settingsShareQrIntro": "Invite family members by scanning the QR code.",
+  "settingsShareQrIntro": "Show this code. The other person scans it on their own phone when joining an existing baby.",
   "settingsFeedingConfigureFirst": "Set up your baby's profile first.",
   "settingsFeedingIntro": "Set how often your baby usually feeds",
   "settingsFeedingInterval": "Time between feeds",
@@ -197,18 +672,50 @@
   "settingsFamilyFirebaseOnly": "Family sharing is only available with Firebase.",
   "settingsShowQr": "Show invite QR",
   "settingsHideQr": "Hide QR",
-  "settingsQrCaption": "Scan to join the family",
+  "settingsQrCaption": "This phone only displays the code. The other person scans it.",
   "settingsGroupBaby": "Baby",
   "settingsGroupPreferences": "Preferences",
   "settingsGroupFamily": "Family",
   "settingsGroupAccount": "Account",
+  "settingsGroupHelp": "Help",
+  "settingsRowContactTitle": "Contact",
+  "settingsRowContactSubtitle": "{email}",
+  "@settingsRowContactSubtitle": {
+    "placeholders": {
+      "email": { "type": "String" }
+    }
+  },
+  "settingsContactEmailSubject": "Question about MiBebé",
+  "settingsContactOpenFail": "Couldn't open the mail app. Write to us at {email}",
+  "@settingsContactOpenFail": {
+    "placeholders": {
+      "email": { "type": "String" }
+    }
+  },
   "settingsRowProfileTitle": "Profile details",
-  "settingsRowProfileSubtitle": "Name, date and height",
+  "settingsRowProfileSubtitle": "Name, date of birth and gender",
   "settingsRowProfileEmpty": "Not set",
   "settingsRowFeedingInterval": "Time between feeds",
   "settingsRowFeedingNotify": "Next-feed reminder",
   "settingsRowUnitWeight": "Weight unit",
   "settingsRowUnitLiquid": "Liquid unit",
+  "settingsRowCurrency": "Currency",
+  "settingsCurrencyAuto": "Automatic",
+  "settingsCurrencyIntro": "Choose the currency used to estimate diaper spend. Automatic follows your device.",
+  "settingsCurrencySearchHint": "Search currency",
+  "settingsCurrencyAutoSubtitle": "Follows your device · {currency}",
+  "@settingsCurrencyAutoSubtitle": {
+    "placeholders": {
+      "currency": { "type": "String" }
+    }
+  },
+  "settingsCurrencyAllSection": "All currencies",
+  "settingsCurrencyNoResults": "No currency matches “{query}”",
+  "@settingsCurrencyNoResults": {
+    "placeholders": {
+      "query": { "type": "String" }
+    }
+  },
   "settingsRowFamilyShare": "Share with family",
   "settingsRowFamilyShareSubtitle": "Show invite QR code",
   "settingsValueOn": "On",
@@ -242,6 +749,7 @@
   },
   "settingsSheetUnitWeightTitle": "Weight unit",
   "settingsSheetUnitLiquidTitle": "Liquid unit",
+  "settingsSheetCurrencyTitle": "Currency",
   "settingsSheetFeedingIntervalTitle": "Time between feeds",
   "settingsSheetShareTitle": "Share with family",
   "editBabyProfileTitle": "Edit baby profile",
@@ -265,7 +773,18 @@
   "loginResetInvalidEmail": "Enter a valid email",
   "loginResetCheckEmail": "Check your email (and spam) to reset your password",
   "loginResetSendFail": "Could not send the email. Try again later.",
-  "loginHeaderTitle": "My Baby Diary",
+  "loginHeaderTitle": "MiBebé",
+  "loginWelcomeBackTitle": "Welcome back",
+  "loginWelcomeBackSubtitle": "Your baby's data is still safely stored",
+  "loginContinueApple": "Continue with Apple",
+  "loginContinueGoogle": "Continue with Google",
+  "loginContinueEmail": "Continue with email",
+  "loginLastAuthMethod": "Last time you signed in with {method}",
+  "@loginLastAuthMethod": {
+    "placeholders": {
+      "method": { "type": "String" }
+    }
+  },
   "loginPasswordHint": "Your password",
   "loginForgotLink": "Forgot your password?",
   "loginValidatorEmailEmpty": "Enter your email",
@@ -276,6 +795,7 @@
   "loginOrWith": "OR SIGN IN WITH",
   "loginNoAccount": "Don't have an account? ",
   "loginRegisterLink": "Sign up",
+  "loginCreateNewProfile": "Create a new profile",
   "loginErrorGeneric": "Sign-in error",
   "loginErrorGoogle": "Google sign-in error",
   "loginErrorApple": "Apple sign-in error",
@@ -318,7 +838,7 @@
   "registerErrorTooMany": "Too many attempts. Wait a few minutes.",
   "registerErrorInvalidCredential": "Invalid credentials",
   "registerErrorUnknown": "Error: {code}. Check Firebase Console.",
-  "onboardingWelcome": "Welcome to My Baby Diary",
+  "onboardingWelcome": "Welcome to MiBebé",
   "onboardingHowStart": "How would you like to start?",
   "onboardingCreateBabyTitle": "Create baby",
   "onboardingCreateBabySubtitle": "Set up a new profile from scratch",
@@ -369,9 +889,12 @@
   "notificationNextFeedBody": "It may be time for another feed for {name}.",
   "formatWeightMetricKg": "{kg} kg",
   "formatWeightLbOz": "{lb} lb {oz} oz",
+  "formatHeightCm": "{cm} cm",
   "formatVolumeMlOnly": "{ml} ml",
   "formatVolumeFlOzOnly": "{flOz} fl oz",
   "unitMlShort": "ml",
+  "unitMlLong": "milliliters",
+  "unitFlOzLong": "fluid ounces",
   "hintExampleWeightLb": "e.g. 9.5",
   "hintExampleFlOz": "e.g. 4",
   "liquidFieldLabelFlOz": "Amount (US fl oz)",
@@ -382,5 +905,514 @@
   "unitSegmentKg": "kg",
   "unitSegmentLbOz": "lb · oz",
   "unitSegmentMl": "mL",
-  "unitSegmentFlOz": "fl oz"
+  "unitSegmentFlOz": "fl oz",
+  "settingsRowPediatricReport": "Report for the paediatrician",
+  "settingsRowPediatricReportSubtitle": "Share PDF with WHO growth curves",
+  "reportShareError": "The report could not be generated. Please try again.",
+  "reportFileNamePrefix": "growth-report",
+  "reportTitle": "Growth report",
+  "reportSexLabel": "Sex",
+  "reportSexMale": "Boy",
+  "reportSexFemale": "Girl",
+  "reportSexUnspecified": "Unspecified",
+  "reportBirthDateLabel": "Date of birth",
+  "reportAgeLabel": "Age",
+  "reportDateLabel": "Report date",
+  "reportAgeMonthsDays": "{months} mo {days} d",
+  "reportAgeDays": "{days} days",
+  "reportChartTitle": "Weight (kg) for age (months) · WHO curves",
+  "reportHeightChartTitle": "Length (cm) for age (months) · WHO curves",
+  "reportChartLegendBaby": "{name}'s weight",
+  "reportChartLegendWho": "WHO percentiles: P3 · P15 · P50 · P85 · P97",
+  "reportChartWhoNote": "Curves are WHO reference percentiles; points are the baby's measurements.",
+  "reportWeightTableTitle": "Latest weigh-ins",
+  "reportHeightTableTitle": "Latest lengths",
+  "reportTableDate": "Date",
+  "reportTableAge": "Age",
+  "reportTableWeight": "Weight",
+  "reportTableHeight": "Length",
+  "reportTableChange": "Change",
+  "reportNoWeightData": "No weigh-ins recorded yet.",
+  "reportNoHeightData": "No lengths recorded yet.",
+  "reportFeedingTitle": "Feeding · last 7 days",
+  "reportFeedingPerDay": "Feeds per day",
+  "reportFeedingBreastPerDay": "Breast per day",
+  "reportFeedingBottlePerDay": "Bottle per day",
+  "reportFeedingDistribution": "Distribution",
+  "reportFeedingDistributionValue": "{breast}% breast · {bottle}% bottle · {solid}% solids",
+  "reportDiapersTitle": "Nappies · last 7 days",
+  "reportDiapersPerDay": "Changes per day",
+  "reportDiapersWet": "Wet",
+  "reportDiapersDirty": "Dirty",
+  "reportDiapersBoth": "Mixed",
+  "reportNoData": "No data",
+  "reportGeneratedWith": "Generated with MiBebé · {date}",
+  "reportTrendsTitle": "Trends and comparisons",
+  "reportPeriodDays": "Last {days} days",
+  "reportComparisonTitle": "Comparison vs previous {days} days",
+  "reportComparisonMetric": "Metric",
+  "reportComparisonCurrent": "Current",
+  "reportComparisonPrevious": "Previous",
+  "reportComparisonChange": "Change",
+  "reportComparisonNew": "new",
+  "reportWeightTrendsTitle": "Weight · trends",
+  "reportWeightTrendDays": "{days}-day trend",
+  "reportWeightGainDays": "{days}-day gain",
+  "reportExecutiveSummary": "Summary",
+  "reportCurrentWeight": "Current weight",
+  "reportCurrentHeight": "Current length",
+  "reportCurrentPercentile": "WHO percentile",
+  "reportWeightForAgePercentile": "WHO percentile (weight/age)",
+  "reportLengthForAgePercentile": "WHO percentile (length/age)",
+  "reportCalculatedPercentileValue": "{value}",
+  "@reportCalculatedPercentileValue": {
+    "placeholders": {
+      "value": { "type": "int" }
+    }
+  },
+  "reportPercentileChip": "P{value}",
+  "@reportPercentileChip": {
+    "placeholders": {
+      "value": { "type": "int" }
+    }
+  },
+  "reportPercentileBelow": "< P3",
+  "reportPercentileAbove": "> P97",
+  "reportSummaryGrowthGroup": "Growth",
+  "reportSummaryRoutineGroup": "Feeding and nappies",
+  "reportSummaryMeasuredOn": "Last measured",
+  "reportSinceLastWeighIn": "Since last weigh-in",
+  "reportDaysSinceWeighIn": "Days since weigh-in",
+  "reportDaysSinceHeight": "Days since length measure",
+  "reportDaysCount": "{days} days",
+  "reportPercentileChange": "Percentile change",
+  "reportHeight": "Height",
+  "reportWeightSection": "Weight",
+  "reportHeightSection": "Height",
+  "reportFeedingSection": "Feeding",
+  "reportDiapersSection": "Nappies",
+  "reportSleepSection": "Sleep",
+  "reportSleepTitle": "Sleep · last 7 days",
+  "reportSleepAveragePerRecordedDay": "Hours per recorded day",
+  "reportSleepHoursValue": "{hours} h",
+  "reportSleepTotal": "Total time asleep",
+  "reportSleepNaps": "Naps",
+  "reportSleepNightWakings": "Night wakings",
+  "reportSleepNightWakingTime": "Total awake time at night",
+  "reportSleepDailyTitle": "Sleep by day · last 7 days",
+  "reportSleepDay": "Day",
+  "reportSleepDuration": "Duration",
+  "reportSleepNapsPerRecordedDay": "Naps per recorded day",
+  "reportSleepWakingsPerRecordedDay": "Wakings per recorded day",
+  "reportSleepRecentSessions": "Recent sleep sessions",
+  "reportSleepStart": "Start",
+  "reportSleepEnd": "End",
+  "reportSleepType": "Type",
+  "reportSleepInProgress": "In progress",
+  "reportWeightOverviewTitle": "Weight data",
+  "reportHeightOverviewTitle": "Length data",
+  "reportFeedingDetailTitle": "Breastfeeding detail",
+  "reportBreastfeedingDetailTitle": "Breastfeeding detail",
+  "reportBottleDetailTitle": "Bottle detail",
+  "reportBottleFeedsPerDay": "Bottles per day",
+  "reportBottleAvgPerFeed": "Average ml per feed",
+  "reportBottleTotalPeriod": "Total in {days} days",
+  "reportComparisonNoData": "—",
+  "reportComparisonInsufficientHistory": "At least 60 days of records are needed to compare with the previous period.",
+  "reportFeedingInterval": "Average interval between feeds",
+  "reportFeedingLongestGap": "Longest stretch without feeding",
+  "reportFeedingBreastBalance": "Left / right breast balance",
+  "reportFeedingBreastBalanceValue": "{left}% / {right}%",
+  "reportFeedingAvgSession": "Average breastfeed duration",
+  "reportFeedingEstimatedBreast": "Estimated breast milk / day",
+  "reportFeedingEstimatedBreastStarred": "Estimated breast milk / day*",
+  "reportEstimatedBreastFootnote": "* Estimate from breastfeeding time (not a measured volume). Conversion: ml = 140 x (1 - e^(-minutes/9)).",
+  "reportCoverageLabel": "Logged: {logged} of {total} days",
+  "@reportCoverageLabel": {
+    "placeholders": {
+      "logged": { "type": "int" },
+      "total": { "type": "int" }
+    }
+  },
+  "reportCoverageLowWarning": "Averages may not be representative (incomplete logging).",
+  "reportLegalDisclaimer": "Personal tracking tool. This data does not replace assessment by a healthcare professional.",
+  "reportFeedingFirstSolid": "First solid food",
+  "reportNoSolidFoodYet": "No solids recorded",
+  "reportWetDiapersPerDay": "Wet nappies per day",
+  "reportStoolDiapersPerDay": "Stools per day",
+  "reportDaysWithoutStool": "Days without stool",
+  "reportDaysWithoutStoolOfPeriod": "{count} of {total} days",
+  "@reportDaysWithoutStoolOfPeriod": {
+    "placeholders": {
+      "count": { "type": "int" },
+      "total": { "type": "int" }
+    }
+  },
+  "reportComparisonAbsoluteChange": "{previous} → {current}",
+  "@reportComparisonAbsoluteChange": {
+    "placeholders": {
+      "previous": { "type": "String" },
+      "current": { "type": "String" }
+    }
+  },
+  "reportDiaperDistribution": "Distribution",
+  "reportDiaperDistributionValue": "{wet}% wet · {dirty}% dirty · {both}% mixed",
+  "premiumUnlockButton": "Unlock",
+  "premiumTeaserTitle": "PREMIUM INSIGHTS",
+  "premiumTeaserSubtitle": "What your records can already tell you about {name}",
+  "premiumTeaserCta": "Try 7 days free",
+  "premiumTeaserAfterPrice": "Then {price}/year · cancel anytime",
+  "premiumTeaserCancelAnytime": "Cancel anytime",
+  "premiumTeaserMoreAnalyses": "{count, plural, one{And 1 more insight} other{And {count} more insights}}",
+  "premiumTeaserBasedOnNights": "{count, plural, one{Based on 1 night logged} other{Based on {count} nights logged}}",
+  "premiumTeaserBasedOnFeedingDays": "{count, plural, one{Based on 1 day of feeds} other{Based on {count} days of feeds}}",
+  "premiumTeaserBasedOnWeights": "{count, plural, one{Based on 1 measurement logged} other{Based on {count} measurements logged}}",
+  "premiumTeaserFeedingTrendTitle": "How today's feeding is going",
+  "premiumTeaserFeedingTrendSubtitle": "Compared with their usual days",
+  "premiumTeaserFeedingTrendHeadline": "See how {name} is feeding today",
+  "premiumTeaserSleepTitle": "Their best sleep time and usual sleeps",
+  "premiumTeaserSleepSubtitle": "From forecast and usual patterns",
+  "premiumTeaserSleepHeadline": "Discover how {name} sleeps",
+  "premiumTeaserGrowthTitle": "WHO weight and height percentiles",
+  "premiumTeaserGrowthSubtitle": "Full curve and projection",
+  "premiumTeaserGrowthHeadline": "Discover {name}'s WHO weight and height percentiles",
+  "settingsGroupSubscription": "Subscription",
+  "settingsRowManageSubscription": "Manage subscription",
+  "settingsRowSubscriptionActive": "Premium active",
+  "settingsRowSubscriptionInactive": "Free plan",
+  "settingsRowSubscriptionFamily": "Premium shared by your family",
+  "settingsRowSubscribe": "Go premium",
+  "settingsRowSubscribeSubtitle": "Unlock insights and advanced tracking",
+  "settingsRowRestorePurchases": "Restore purchases",
+  "restorePurchasesSuccess": "Purchases restored successfully",
+  "restorePurchasesEmpty": "No purchases found to restore",
+  "settingsRowComplimentaryPremium": "Complimentary Premium",
+  "settingsRowComplimentaryPremiumUntil": "Free until {date}",
+  "@settingsRowComplimentaryPremiumUntil": {
+    "placeholders": {
+      "date": { "type": "String" }
+    }
+  },
+  "settingsRowRestorePurchasesGiftHint": "If you purchased a subscription, restore it here",
+  "restorePurchasesGiftDialogTitle": "Complimentary Premium",
+  "restorePurchasesGiftDialogBody": "Your Premium access is a temporary gift from the app. There is no purchase to restore. You can subscribe from settings when it ends if you'd like to keep Premium.",
+  "premiumLaunchNoticeTitle": "Thank you for trusting us!",
+  "premiumLaunchNoticeBodyGift": "Behind this app is a family like yours, and as a thank-you for being with us from the start, we've unlocked all the Premium features added in this update completely free for your family until {date}.",
+  "@premiumLaunchNoticeBodyGift": {
+    "placeholders": {
+      "date": { "type": "String" }
+    }
+  },
+  "premiumLaunchNoticeBodyEssential": "The essentials will always remain free.",
+  "premiumLaunchNoticeSignOff": "A warm hug,",
+  "premiumLaunchNoticeSignatureName": "S.",
+  "premiumLaunchNoticeDismiss": "Got it!",
+  "premiumExpiryWarningTitle": "Your Premium is ending soon",
+  "premiumExpiryWarningBodyDays": "You have {days} days of Premium left. If you don't renew, you'll lose insights, evolution charts, PDF reports, and family sharing via QR.",
+  "@premiumExpiryWarningBodyDays": {
+    "placeholders": {
+      "days": { "type": "int" }
+    }
+  },
+  "premiumExpiryWarningBodyToday": "Your Premium ends today. If you don't renew, you'll lose insights, evolution charts, PDF reports, and family sharing via QR.",
+  "premiumExpiryWarningBodyGiftDays": "You have {days} days left of your Premium gift. After that you'll return to the free plan as always, with all the essentials intact.\n\nIf these features have made your day-to-day easier, you can keep them by subscribing.",
+  "@premiumExpiryWarningBodyGiftDays": {
+    "placeholders": {
+      "days": { "type": "int" }
+    }
+  },
+  "premiumExpiryWarningBodyGiftToday": "Your Premium gift ends today. After that you'll return to the free plan as always, with all the essentials intact.\n\nIf these features have made your day-to-day easier, you can keep them by subscribing.",
+  "premiumExpiryWarningRenew": "Go premium",
+  "premiumExpiryWarningDismiss": "Not now",
+  "paywallTitle": "Go premium",
+  "paywallSubtitle": "Everything you were missing to care for and better understand your baby.",
+  "paywallFeatureInsights": "All insights and evolution charts",
+  "paywallFeatureFeedingTrack": "Daily feeding tracking",
+  "paywallFeatureSleepTrack": "Sleep analysis and next-sleep prediction",
+  "paywallFeatureFamily": "Share with your family via QR",
+  "paywallFeaturePdf": "PDF report for the pediatrician",
+  "paywallBadgeBestValue": "BEST VALUE",
+  "paywallBadgeRecommended": "Recommended",
+  "paywallAnnualMonthlyEquivalent": "Just {price}/month",
+  "@paywallAnnualMonthlyEquivalent": {
+    "placeholders": {
+      "price": { "type": "String" }
+    }
+  },
+  "paywallTrialBadge": "7 days free",
+  "paywallPlanAnnual": "Annual",
+  "paywallPlanMonthly": "Monthly",
+  "paywallPlanGeneric": "Subscription",
+  "paywallPerYear": "/year",
+  "paywallPerMonth": "/month",
+  "paywallPerWeek": "/week",
+  "paywallCtaTrial": "Start free trial",
+  "paywallCtaSubscribe": "Subscribe",
+  "paywallRestore": "Restore purchases",
+  "paywallTerms": "Terms",
+  "paywallPrivacy": "Privacy",
+  "paywallLegal": "Auto-renews. Cancel in Settings at least 24h before the period ends.",
+  "paywallPurchaseError": "The purchase could not be completed. Please try again.",
+  "paywallLoadError": "Could not load the plans. Check your connection.",
+  "paywallClose": "Close",
+  "onboardingFlowContinue": "Continue",
+  "onboardingFlowBornTitle": "Has your baby been born?",
+  "onboardingFlowBornSubtitle": "We'll prepare their profile in a minute",
+  "onboardingFlowBornOption": "Already born",
+  "onboardingFlowPregnantOption": "Expecting a baby",
+  "onboardingFlowHaveAccount": "I already have an account",
+  "onboardingFlowQrInvite": "I've been invited to a family",
+  "onboardingFlowNameTitle": "What's your baby's name?",
+  "onboardingFlowNameSubtitle": "We'll personalize the app with their name",
+  "onboardingFlowNameHint": "Baby's name",
+  "onboardingFlowNameUndecided": "We haven't decided yet",
+  "onboardingFlowGenderTitle": "Is it a boy or a girl?",
+  "onboardingFlowGenderTitleNamed": "Is {name} a boy or a girl?",
+  "@onboardingFlowGenderTitleNamed": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "onboardingFlowGenderSubtitle": "WHO growth curves are different for boys and girls",
+  "onboardingFlowBabyGeneric": "the baby",
+  "onboardingFlowBabyGenericYour": "your baby",
+  "onboardingFlowBabyDefaultName": "Your baby",
+  "onboardingFlowBirthTitle": "When was {name} born?",
+  "@onboardingFlowBirthTitle": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "onboardingFlowDueTitle": "When is {name}'s due date?",
+  "@onboardingFlowDueTitle": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "onboardingFlowBirthSubtitle": "We'll calculate age and percentiles",
+  "onboardingFlowAgeHasMonthsDays": "{name} is {months} months and {days} days old",
+  "@onboardingFlowAgeHasMonthsDays": {
+    "placeholders": {
+      "name": { "type": "String" },
+      "months": { "type": "int" },
+      "days": { "type": "int" }
+    }
+  },
+  "onboardingFlowAgeHasMonths": "{name} is {months} months old",
+  "@onboardingFlowAgeHasMonths": {
+    "placeholders": {
+      "name": { "type": "String" },
+      "months": { "type": "int" }
+    }
+  },
+  "onboardingFlowAgeHasDays": "{name} is {days} days old",
+  "@onboardingFlowAgeHasDays": {
+    "placeholders": {
+      "name": { "type": "String" },
+      "days": { "type": "int" }
+    }
+  },
+  "onboardingFlowDueInDays": "{name} will be born in {days} days",
+  "@onboardingFlowDueInDays": {
+    "placeholders": {
+      "name": { "type": "String" },
+      "days": { "type": "int" }
+    }
+  },
+  "onboardingFlowDueInOneDay": "{name} will be born in 1 day",
+  "@onboardingFlowDueInOneDay": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "onboardingFlowDueToday": "{name} is due today",
+  "@onboardingFlowDueToday": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "onboardingFlowMeasuresTitle": "Latest checkup measurements",
+  "onboardingFlowMeasuresSubtitle": "Optional — this helps us show the growth curve",
+  "onboardingFlowMeasuresLater": "I'll add them later",
+  "onboardingFlowWeightLabel": "Weight",
+  "onboardingFlowHeightLabel": "Height",
+  "onboardingFlowWeightRangeHint": "Check the weight: it's usually between 0.5 and 30 kg",
+  "onboardingFlowHeightRangeHint": "Check the height: it's usually between 30 and 120 cm",
+  "onboardingFlowWeightUnitTitle": "Weight unit",
+  "onboardingFlowHeightUnitTitle": "Height unit",
+  "onboardingFlowHeightUnitCm": "Centimeters (cm)",
+  "onboardingFlowHeightUnitIn": "Inches (in)",
+  "onboardingFlowWeightUnitKg": "Kilograms (kg)",
+  "onboardingFlowWeightUnitLb": "Pounds (lb)",
+  "onboardingFlowPreparingTitle": "Preparing your baby's data",
+  "onboardingFlowCalcPercentiles": "Calculating WHO percentiles for {name}",
+  "@onboardingFlowCalcPercentiles": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "onboardingFlowCalcWhoCurve": "Calculating WHO curve for {months} months",
+  "@onboardingFlowCalcWhoCurve": {
+    "placeholders": {
+      "months": { "type": "int" }
+    }
+  },
+  "onboardingFlowCalcFeeding": "Calculating feeding rhythm",
+  "onboardingFlowCalcSleep": "Calculating sleep routines",
+  "onboardingFlowCalcDueDate": "Calculating due date",
+  "onboardingFlowCalcNewbornReady": "Getting everything ready for birth",
+  "onboardingFlowCalcNewbornFeeding": "Preparing newborn feeding rhythm",
+  "onboardingFlowCalcNewbornRoutines": "Preparing newborn sleep routines",
+  "onboardingFlowResultsTitle": "All set for {name}",
+  "@onboardingFlowResultsTitle": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "onboardingFlowResultsSubtitle": "Here's what we've prepared for their age",
+  "onboardingFlowResultsSubtitlePregnant": "Everything will be ready when they arrive",
+  "onboardingFlowResultAgeLabel": "{name}'s age",
+  "@onboardingFlowResultAgeLabel": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "onboardingFlowResultAgeMonths": "{months} months",
+  "@onboardingFlowResultAgeMonths": {
+    "placeholders": {
+      "months": { "type": "int" }
+    }
+  },
+  "onboardingFlowResultAgeMonthsDays": "{months} months and {days} days",
+  "@onboardingFlowResultAgeMonthsDays": {
+    "placeholders": {
+      "months": { "type": "int" },
+      "days": { "type": "int" }
+    }
+  },
+  "onboardingFlowResultAgeOneDay": "1 day",
+  "onboardingFlowResultAgeDays": "{days} days",
+  "@onboardingFlowResultAgeDays": {
+    "placeholders": {
+      "days": { "type": "int" }
+    }
+  },
+  "onboardingFlowResultAgeOneYear": "1 year",
+  "onboardingFlowResultAgeYears": "{years} years",
+  "@onboardingFlowResultAgeYears": {
+    "placeholders": {
+      "years": { "type": "int" }
+    }
+  },
+  "onboardingFlowResultAgeOneYearHalf": "1½ years",
+  "onboardingFlowResultAgeYearsHalf": "{years}½ years",
+  "@onboardingFlowResultAgeYearsHalf": {
+    "placeholders": {
+      "years": { "type": "int" }
+    }
+  },
+  "onboardingFlowResultDueHeroLabel": "Due in",
+  "onboardingFlowResultDueHeroDays": "{days} days",
+  "@onboardingFlowResultDueHeroDays": {
+    "placeholders": {
+      "days": { "type": "int" }
+    }
+  },
+  "onboardingFlowResultDueHeroOne": "1 day",
+  "onboardingFlowResultDueHeroToday": "Today",
+  "onboardingFlowResultDueDateCaption": "Due date: {date}",
+  "@onboardingFlowResultDueDateCaption": {
+    "placeholders": {
+      "date": { "type": "String" }
+    }
+  },
+  "onboardingFlowResultGrowthTitle": "WHO growth",
+  "onboardingFlowResultWeightPct": "Weight",
+  "onboardingFlowResultHeightPct": "Height",
+  "onboardingFlowResultNoWeight": "No data",
+  "onboardingFlowResultNoHeight": "No data",
+  "onboardingFlowResultNoWeightHeight": "No weight or height yet. You can add them anytime.",
+  "onboardingFlowResultWhoMedian": "WHO median at this age: {weight} · {height}",
+  "@onboardingFlowResultWhoMedian": {
+    "placeholders": {
+      "weight": { "type": "String" },
+      "height": { "type": "String" }
+    }
+  },
+  "onboardingFlowResultPercentileContext": "P3 is within the reference range. What matters is the trend over time, not a single reading.",
+  "onboardingFlowResultMedicalDisclaimer": "For guidance only, based on WHO curves. Not a substitute for your pediatrician's advice.",
+  "onboardingFlowResultFeedingTitle": "Feeds",
+  "onboardingFlowResultMealsTitle": "Meals",
+  "onboardingFlowResultFeedingValue": "Every {interval}",
+  "@onboardingFlowResultFeedingValue": {
+    "placeholders": {
+      "interval": { "type": "String" }
+    }
+  },
+  "onboardingFlowResultFeedingMealsTransition": "Meals + milk feeds",
+  "onboardingFlowResultFeedingMealsTransitionHint": "Milk is combined with daytime meals",
+  "onboardingFlowResultFeedingMealsToddler": "3 meals and 2 snacks",
+  "onboardingFlowResultFeedingMealsToddlerHint": "At this age feeding is no longer counted every X hours",
+  "onboardingFlowResultFeedingHint": "We'll use this to remind you about the next feed",
+  "onboardingFlowResultFeedingPregnantHint": "Typical newborn rhythm, ready from day one",
+  "onboardingFlowResultSleepTitle": "Sleep",
+  "onboardingFlowResultSleepWake": "Wake window: {range}",
+  "@onboardingFlowResultSleepWake": {
+    "placeholders": {
+      "range": { "type": "String" }
+    }
+  },
+  "onboardingFlowResultSleepTotal": "About {range} of sleep a day",
+  "@onboardingFlowResultSleepTotal": {
+    "placeholders": {
+      "range": { "type": "String" }
+    }
+  },
+  "onboardingFlowResultSleepPregnantHint": "Short newborn wake windows, ready at birth",
+  "onboardingFlowResultWhoPregnant": "WHO curves will activate when they are born",
+  "onboardingFlowNotifyTitle": "Want to enable notifications so we can remind you about {name}'s next feed?",
+  "@onboardingFlowNotifyTitle": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "onboardingFlowNotifySubtitle": "For their age we've set a feed every {interval}, which is typical, but you can customize it anytime in settings.",
+  "@onboardingFlowNotifySubtitle": {
+    "placeholders": {
+      "interval": { "type": "String" }
+    }
+  },
+  "onboardingFlowNotifyTitleToddler": "Want to enable notifications for {name}?",
+  "@onboardingFlowNotifyTitleToddler": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "onboardingFlowNotifySubtitleToddler": "You can get app reminders. At this age feeding is no longer counted every X hours — customize anytime in settings.",
+  "onboardingFlowNotifyEnable": "Enable notifications",
+  "onboardingFlowNotifyLater": "Not now",
+  "onboardingFlowSaveTitle": "Save {name}'s data",
+  "@onboardingFlowSaveTitle": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "onboardingFlowSaveSubtitle": "Don't lose your data if you switch phones",
+  "onboardingFlowContinueApple": "Continue with Apple",
+  "onboardingFlowContinueGoogle": "Continue with Google",
+  "onboardingFlowContinueEmail": "Continue with email",
+  "onboardingFlowDataSafe": "Your baby's data is protected, encrypted, and never sold to third parties.",
+  "onboardingFlowQrNeedsConnection": "A connection is required to join with QR",
+  "onboardingFlowQrOpenFail": "Couldn't open the QR scanner",
+  "onboardingFlowSaveFail": "Couldn't save the data: {error}",
+  "@onboardingFlowSaveFail": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
+  "onboardingFlowProfileAlreadyExistsTitle": "This account already has a profile",
+  "onboardingFlowProfileAlreadyExists": "That email or account already has a profile. Use “I already have an account” to sign in, or try a different account so you don’t overwrite existing data.",
+  "onboardingFlowProfileAlreadyExistsButton": "Got it",
+  "onboardingFlowAuthError": "Authentication error",
+  "onboardingFlowSignInFail": "Couldn't sign in"
 }

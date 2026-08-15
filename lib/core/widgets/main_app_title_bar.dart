@@ -36,7 +36,7 @@ class TitleBarScrollFade extends StatelessWidget {
   }
 }
 
-/// Cabecera común: icono de la app, título centrado y ajustes.
+/// Cabecera común: título centrado y ajustes.
 /// Altura [totalHeight] (= [kToolbarHeight]) para alinear padding del scroll y el fade.
 class MainAppTitleBar extends StatelessWidget implements PreferredSizeWidget {
   /// Misma altura que la barra; útil con [Stack] + scroll a pantalla completa.
@@ -60,23 +60,9 @@ class MainAppTitleBar extends StatelessWidget implements PreferredSizeWidget {
           fontWeight: FontWeight.w700,
           color: AppTheme.textHeading,
         );
-    final titleRow = Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Image.asset(
-          AppTheme.titleIconAsset,
-          width: 34,
-          height: 34,
-          fit: BoxFit.contain,
-          errorBuilder: (_, _, _) => Icon(
-            Icons.child_care_rounded,
-            size: 34,
-            color: AppTheme.palettePrimary,
-          ),
-        ),
-        const SizedBox(width: 12),
-        Text(AppLocalizations.of(context)!.appTitle, style: titleStyle),
-      ],
+    final title = Text(
+      AppLocalizations.of(context)!.appTitle,
+      style: titleStyle,
     );
 
     return ClipRect(
@@ -86,7 +72,8 @@ class MainAppTitleBar extends StatelessWidget implements PreferredSizeWidget {
           height: kToolbarHeight,
           child: Padding(
             padding: const EdgeInsets.symmetric(
-                horizontal: AppTheme.screenEdgePadding),
+              horizontal: AppTheme.screenEdgePadding,
+            ),
             child: Row(
               children: [
                 const SizedBox(width: 48),
@@ -100,36 +87,37 @@ class MainAppTitleBar extends StatelessWidget implements PreferredSizeWidget {
                               borderRadius: BorderRadius.circular(12),
                               child: Padding(
                                 padding: const EdgeInsets.symmetric(
-                                    vertical: 6, horizontal: 8),
-                                child: titleRow,
+                                  vertical: 6,
+                                  horizontal: 8,
+                                ),
+                                child: title,
                               ),
                             ),
                           )
                         : Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 6),
-                          child: titleRow,
-                        ),
+                            padding: const EdgeInsets.symmetric(vertical: 6),
+                            child: title,
+                          ),
+                  ),
                 ),
-              ),
-              IconButton(
-                onPressed: onSettingsTap,
-                style: IconButton.styleFrom(
-                  foregroundColor: AppTheme.textHeading,
-                  minimumSize: const Size(48, 48),
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                IconButton(
+                  onPressed: onSettingsTap,
+                  style: IconButton.styleFrom(
+                    foregroundColor: AppTheme.textHeading,
+                    minimumSize: const Size(48, 48),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  icon: FaIcon(
+                    FontAwesomeIcons.gear,
+                    size: 22,
+                    color: AppTheme.textHeading,
+                  ),
                 ),
-                icon: FaIcon(
-                  FontAwesomeIcons.gear,
-                  size: 22,
-                  color: AppTheme.textHeading,
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
         ),
       ),
     );
   }
 }
-

@@ -4,6 +4,7 @@ import 'package:control_bebe/l10n/app_date_locale.dart';
 import 'package:control_bebe/l10n/app_localizations.dart';
 import 'package:control_bebe/l10n/app_time_format.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:intl/intl.dart';
@@ -14,10 +15,12 @@ import '../../../core/widgets/main_app_title_bar.dart';
 import '../../../core/theme/edit_dialog_theme.dart';
 import '../../../core/db/isar_service.dart';
 import '../../../core/providers/record_stream_providers.dart';
-import '../../../core/widgets/edit_dialog_fields.dart';
 import '../../../core/widgets/edit_bottom_sheet.dart';
+import '../../../core/widgets/edit_list_rows.dart';
+import '../../../core/widgets/inline_confirming_button.dart';
 import '../../../core/services/next_feeding_notification_service.dart';
 import '../../../core/services/lactation_live_activity_service.dart';
+import '../../../core/services/lactation_timer_controller.dart';
 import '../../../core/widgets/stream_record_load_error.dart';
 import '../../../core/widgets/confirm_delete_record_dialog.dart';
 import '../../../core/models/measurement_units.dart';
@@ -29,8 +32,11 @@ import '../../../core/models/enums.dart';
 import 'bottle_view.dart';
 import 'solid_food_view.dart';
 import '../widgets/breast_side_picker_sheet.dart';
+import '../../../core/utils/feeding_ml_estimate.dart';
 import '../../../core/utils/solid_food_display.dart';
 import '../../../core/utils/history_calendar_window.dart';
+import '../../../core/utils/history_highlight.dart';
+import '../../../core/widgets/history_entry_reveal.dart';
 
 class FeedingView extends ConsumerStatefulWidget {
   final VoidCallback? onTitleTap;
@@ -50,22 +56,53 @@ class FeedingView extends ConsumerStatefulWidget {
   ConsumerState<FeedingView> createState() => _FeedingViewState();
 }
 
-class _FeedingViewState extends ConsumerState<FeedingView> {
+enum _FeedTypeSlot { breast, bottle, solid }
+
+class _FeedingViewState extends ConsumerState<FeedingView>
+    with HistoryHighlightState, WidgetsBindingObserver {
   Timer? _timer;
+  StreamSubscription<void>? _timerChangedSub;
   LactationTimer? _activeTimer;
+  FeedingRecord? _optimisticFeedingRecord;
+  FeedingRecord? _pendingHistoryReveal;
+  bool _awaitingHistoryReveal = false;
+  _FeedTypeSlot? _confirmingSlot;
+  InlineSavePhase _confirmPhase = InlineSavePhase.idle;
   final Set<int> _deletedFeedingIds = {};
   DateTime _lastHistoryScrollExpand = DateTime.fromMillisecondsSinceEpoch(0);
+
+  bool get _isConfirming => _confirmPhase != InlineSavePhase.idle;
+
+  InlineSavePhase _phaseForSlot(_FeedTypeSlot slot) =>
+      _confirmingSlot == slot ? _confirmPhase : InlineSavePhase.idle;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadActiveTimer();
+    _timerChangedSub = LactationTimerController.onTimerChanged.listen((_) {
+      unawaited(_loadActiveTimer());
+    });
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _timer?.cancel();
+    _timerChangedSub?.cancel();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(
+        LactationTimerController.reloadFromDisk().then(
+          (_) => _loadActiveTimer(),
+        ),
+      );
+    }
   }
 
   Future<void> _loadActiveTimer() async {
@@ -82,8 +119,16 @@ class _FeedingViewState extends ConsumerState<FeedingView> {
   void _startTick() {
     _timer?.cancel();
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) setState(() {});
+      if (!mounted) return;
+      if (_activeTimer?.isPaused == true) return;
+      setState(() {});
     });
+  }
+
+  Future<void> _togglePauseBreast() async {
+    if (_activeTimer == null || _isConfirming) return;
+    await LactationTimerController.togglePause();
+    await _loadActiveTimer();
   }
 
   Future<void> _startBreast(LactationSide side) async {
@@ -100,66 +145,227 @@ class _FeedingViewState extends ConsumerState<FeedingView> {
     unawaited(LactationLiveActivityService.syncForActiveTimer());
   }
 
-  Future<void> _stopBreast() async {
-    final timer = _activeTimer;
-    if (timer == null) return;
+  Future<void> _runFeedTypeConfirm({
+    required _FeedTypeSlot slot,
+    required Future<bool> Function() action,
+    VoidCallback? onSavedVisible,
+  }) async {
+    if (_isConfirming) return;
+
+    HapticFeedback.lightImpact();
+    setState(() {
+      _confirmingSlot = slot;
+      _confirmPhase = InlineSavePhase.loading;
+    });
+
+    final startedAt = DateTime.now();
+    var saved = false;
+    try {
+      saved = await action();
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _confirmPhase = InlineSavePhase.idle;
+          _confirmingSlot = null;
+        });
+      }
+      rethrow;
+    }
+
+    if (!mounted) return;
+
+    final elapsed = DateTime.now().difference(startedAt);
+    const minLoading = Duration(milliseconds: 750);
+    final remaining = minLoading - elapsed;
+    if (remaining > Duration.zero) {
+      await Future<void>.delayed(remaining);
+    }
+    if (!mounted) return;
+
+    if (!saved) {
+      setState(() {
+        _confirmPhase = InlineSavePhase.idle;
+        _confirmingSlot = null;
+      });
+      return;
+    }
+
+    HapticFeedback.mediumImpact();
+    setState(() => _confirmPhase = InlineSavePhase.saved);
+    onSavedVisible?.call();
+
+    await Future<void>.delayed(const Duration(milliseconds: 1200));
+    if (!mounted) return;
+    setState(() {
+      _confirmPhase = InlineSavePhase.idle;
+      _confirmingSlot = null;
+    });
+  }
+
+  Future<void> _handleStopBreast() async {
+    if (_isConfirming) return;
+    if (_activeTimer == null) {
+      final stored = await IsarService.getActiveLactationTimer();
+      if (stored == null) return;
+      if (mounted) {
+        setState(() => _activeTimer = stored);
+        _startTick();
+      }
+    }
+
     unawaited(LactationLiveActivityService.stop());
     _timer?.cancel();
+    _completeStoppedBreastTimer();
+
+    await _runFeedTypeConfirm(
+      slot: _FeedTypeSlot.breast,
+      action: _persistStoppedBreast,
+      onSavedVisible: _revealFeedingHistory,
+    );
+  }
+
+  Future<bool> _persistStoppedBreast() async {
+    final active = await IsarService.getActiveLactationTimer();
+    if (active == null) return false;
+    final durationSeconds = active.elapsed.inSeconds;
+    final stopped = await IsarService.stopLactationTimer();
+    if (stopped == null) return false;
+    final record = FeedingRecord(
+      type: stopped.side == LactationSide.left
+          ? FeedingType.leftBreast
+          : FeedingType.rightBreast,
+      dateTime: stopped.startedAt,
+      durationSeconds: durationSeconds,
+    );
+    setState(() {
+      _pendingHistoryReveal = record;
+      _awaitingHistoryReveal = true;
+    });
+    await IsarService.addFeedingRecord(record);
+    await NextFeedingNotificationService.syncFromStorage();
+    return true;
+  }
+
+  Future<void> _confirmFeedTypeFromRoute({
+    required _FeedTypeSlot slot,
+    required FeedingRecord record,
+  }) async {
+    await _runFeedTypeConfirm(
+      slot: slot,
+      action: () async {
+        setState(() {
+          _pendingHistoryReveal = record;
+          _awaitingHistoryReveal = true;
+        });
+        await IsarService.addFeedingRecord(record);
+        await NextFeedingNotificationService.syncFromStorage();
+        return true;
+      },
+      onSavedVisible: () {
+        markHistoryHighlight(HistoryHighlightKeys.feeding(record));
+        setState(() {
+          _optimisticFeedingRecord = record;
+          _awaitingHistoryReveal = false;
+          _pendingHistoryReveal = null;
+        });
+      },
+    );
+  }
+
+  void _revealFeedingHistory() {
+    final record = _pendingHistoryReveal;
+    if (record == null) return;
+    markHistoryHighlight(HistoryHighlightKeys.feeding(record));
+    setState(() {
+      _optimisticFeedingRecord = record;
+      _awaitingHistoryReveal = false;
+      _pendingHistoryReveal = null;
+    });
+  }
+
+  void _completeStoppedBreastTimer() {
     if (mounted) setState(() => _activeTimer = null);
-    // Cronómetro en disco local; al parar se encola la toma como el resto de registros.
-    unawaited((() async {
-      final stopped = await IsarService.stopLactationTimer();
-      if (stopped == null) return;
-      final durationSeconds =
-          DateTime.now().difference(stopped.startedAt).inSeconds;
-      await IsarService.addFeedingRecord(
-        FeedingRecord(
-          type: stopped.side == LactationSide.left
-              ? FeedingType.leftBreast
-              : FeedingType.rightBreast,
-          dateTime: stopped.startedAt,
-          durationSeconds: durationSeconds,
-        ),
-      );
-      await NextFeedingNotificationService.syncFromStorage();
-    })());
   }
 
   Future<void> _openBottle() async {
-    await Navigator.push(
+    if (_isConfirming) return;
+    final record = await Navigator.push<FeedingRecord>(
       context,
       MaterialPageRoute(builder: (_) => const BottleView()),
     );
+    if (record != null && mounted) {
+      await _confirmFeedTypeFromRoute(
+        slot: _FeedTypeSlot.bottle,
+        record: record,
+      );
+    }
   }
 
   Future<void> _onBreastTypeTap() async {
     if (_activeTimer != null) {
-      await _stopBreast();
+      await _handleStopBreast();
       return;
     }
+    if (_isConfirming) return;
     final side = await showBreastSidePickerSheet(context);
     if (!mounted || side == null) return;
     await _startBreast(side);
   }
 
   Future<void> _openSolidFood() async {
-    await Navigator.push(
+    if (_isConfirming) return;
+    final record = await Navigator.push<FeedingRecord>(
       context,
-      MaterialPageRoute<void>(builder: (_) => const SolidFoodView()),
+      MaterialPageRoute(builder: (_) => const SolidFoodView()),
     );
+    if (record != null && mounted) {
+      await _confirmFeedTypeFromRoute(
+        slot: _FeedTypeSlot.solid,
+        record: record,
+      );
+    }
   }
 
   void _deleteFeedingRecord(int id) {
     setState(() => _deletedFeedingIds.add(id));
-    unawaited(IsarService.deleteFeedingRecord(id).then((_) {
-      if (mounted) setState(() => _deletedFeedingIds.remove(id));
-    }));
+    unawaited(
+      IsarService.deleteFeedingRecord(id).then((_) {
+        if (mounted) setState(() => _deletedFeedingIds.remove(id));
+      }),
+    );
   }
 
   List<FeedingRecord> _feedingRecordsWithoutDeleted(List<FeedingRecord> raw) {
     final out = List<FeedingRecord>.from(raw)
       ..removeWhere((r) => r.id != null && _deletedFeedingIds.contains(r.id));
-    return out;
+    return _mergeOptimisticFeeding(
+      hidePendingHistoryRecord(
+        records: out,
+        awaitingReveal: _awaitingHistoryReveal,
+        pending: _pendingHistoryReveal,
+        matchesPending: HistoryHighlightKeys.feedingMatchesPending,
+      ),
+    );
+  }
+
+  List<FeedingRecord> _mergeOptimisticFeeding(List<FeedingRecord> records) {
+    final opt = _optimisticFeedingRecord;
+    if (opt == null) return records;
+    final match = records.any(
+      (r) =>
+          r.type == opt.type &&
+          HistoryHighlightKeys.recordsMatchWithinSeconds(
+            r.dateTime,
+            opt.dateTime,
+          ),
+    );
+    if (match) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() => _optimisticFeedingRecord = null);
+      });
+      return records;
+    }
+    return [opt, ...records];
   }
 
   bool _onFeedingHistoryScrollNotification(ScrollNotification n) {
@@ -199,15 +405,19 @@ class _FeedingViewState extends ConsumerState<FeedingView> {
 
   Widget _feedingHistoryColumn(
     BuildContext context,
-    List<FeedingRecord> records, {
-    required bool hasOlderOutsideWindow,
-  }) {
+    List<FeedingRecord> records,
+  ) {
     final l10n = AppLocalizations.of(context)!;
     final dateCode = dateFormatLanguageCode(context);
+    final prefs =
+        ref.watch(measurementPrefsProvider).valueOrNull ??
+        MeasurementPrefs.defaultsForDispatcher();
     final sorted = List<FeedingRecord>.from(records)
       ..sort((a, b) => b.dateTime.compareTo(a.dateTime));
     // Ocultar registros borrados optimistamente
-    sorted.removeWhere((r) => r.id != null && _deletedFeedingIds.contains(r.id));
+    sorted.removeWhere(
+      (r) => r.id != null && _deletedFeedingIds.contains(r.id),
+    );
     final grouped = <String, List<FeedingRecord>>{};
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
@@ -235,9 +445,7 @@ class _FeedingViewState extends ConsumerState<FeedingView> {
           Text(l10n.historyTitle, style: titleStyle),
           const SizedBox(height: 12),
           Text(
-            hasOlderOutsideWindow
-                ? l10n.historyScrollLoadMore
-                : l10n.feedingHistoryEmpty,
+            l10n.feedingHistoryEmpty,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
               color: AppTheme.textLight,
               height: 1.4,
@@ -264,9 +472,11 @@ class _FeedingViewState extends ConsumerState<FeedingView> {
                   ),
                 ),
                 Text(
-                  e.value.length == 1
-                      ? l10n.feedingSessionCountOne
-                      : l10n.feedingSessionCountN(e.value.length),
+                  formatVolumeFromMl(
+                    sumEstimatedFeedingMl(e.value).round(),
+                    prefs,
+                    l10n,
+                  ),
                   style: Theme.of(
                     context,
                   ).textTheme.bodySmall?.copyWith(color: AppTheme.textLight),
@@ -274,16 +484,24 @@ class _FeedingViewState extends ConsumerState<FeedingView> {
               ],
             ),
             const SizedBox(height: 8),
-            ...e.value.map((r) => _FeedingRecordTile(
-              record: r,
-              onDelete: r.id != null
-                  ? () async {
-                      final ok = await confirmDeleteRecord(context);
-                      if (!context.mounted || !ok) return;
-                      _deleteFeedingRecord(r.id!);
-                    }
-                  : null,
-            )),
+            ...e.value.map(
+              (r) => HistoryEntryReveal(
+                highlighted: isHistoryHighlighted(
+                  HistoryHighlightKeys.feeding(r),
+                ),
+                accentColor: feedingHistoryAccent(r.type),
+                child: _FeedingRecordTile(
+                  record: r,
+                  onDelete: r.id != null
+                      ? () async {
+                          final ok = await confirmDeleteRecord(context);
+                          if (!context.mounted || !ok) return;
+                          _deleteFeedingRecord(r.id!);
+                        }
+                      : null,
+                ),
+              ),
+            ),
             const SizedBox(height: 16),
           ],
         ),
@@ -297,9 +515,6 @@ class _FeedingViewState extends ConsumerState<FeedingView> {
     final feedingRecordsAsync = widget.isActiveTab
         ? ref.watch(feedingRecordsStreamProvider)
         : ref.read(feedingRecordsStreamProvider);
-    final hasOlderAsync = widget.isActiveTab
-        ? ref.watch(hasOlderFeedingRecordsProvider)
-        : ref.read(hasOlderFeedingRecordsProvider);
     return Scaffold(
       backgroundColor: AppTheme.background,
       body: SafeArea(
@@ -311,168 +526,186 @@ class _FeedingViewState extends ConsumerState<FeedingView> {
               child: NotificationListener<ScrollNotification>(
                 onNotification: _onFeedingHistoryScrollNotification,
                 child: SingleChildScrollView(
-                controller: widget.scrollController,
-                padding: EdgeInsets.fromLTRB(
-                  AppTheme.screenEdgePadding,
-                  MainAppTitleBar.totalHeight +
-                      AppTheme.contentPaddingTopAfterTitleBar,
-                  AppTheme.screenEdgePadding,
-                  20 + AppTheme.safeBottomPadding(context),
-                ),
-                child: Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Row(
-                          children: [
-                            FaIcon(
-                              FontAwesomeIcons.utensils,
-                              color: AppTheme.pageTitleIconFeeding,
-                              size: 20,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              l10n.feedingTitle,
-                              style: Theme.of(context).textTheme.titleLarge
-                                  ?.copyWith(
-                                    fontWeight: FontWeight.bold,
-                                    color: AppTheme.textDark,
-                                  ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 24),
-                        AnimatedSize(
-                          duration: const Duration(milliseconds: 360),
-                          curve: Curves.easeOutCubic,
-                          alignment: Alignment.topCenter,
-                          clipBehavior: Clip.none,
-                          child: _activeTimer == null
-                              ? const SizedBox.shrink()
-                              : Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.stretch,
-                                  children: [
-                                    AnimatedSwitcher(
-                                      duration:
-                                          const Duration(milliseconds: 340),
-                                      switchInCurve: Curves.easeOutCubic,
-                                      switchOutCurve: Curves.easeInCubic,
-                                      transitionBuilder: (child, animation) {
-                                        final slide =
-                                            Tween<Offset>(
-                                          begin: const Offset(0, -0.12),
-                                          end: Offset.zero,
-                                        ).animate(
-                                          CurvedAnimation(
-                                            parent: animation,
-                                            curve: Curves.easeOutCubic,
-                                          ),
-                                        );
-                                        return SizedBox(
-                                          width: double.infinity,
-                                          child: ClipRect(
-                                            child: FadeTransition(
-                                              opacity: animation,
-                                              child: SlideTransition(
-                                                position: slide,
-                                                child: child,
+                  controller: widget.scrollController,
+                  padding: EdgeInsets.fromLTRB(
+                    AppTheme.screenEdgePadding,
+                    MainAppTitleBar.totalHeight +
+                        AppTheme.contentPaddingTopAfterTitleBar,
+                    AppTheme.screenEdgePadding,
+                    20 + AppTheme.safeBottomPadding(context),
+                  ),
+                  child: Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(
+                        AppTheme.sectionCardPadding,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Row(
+                            children: [
+                              FaIcon(
+                                FontAwesomeIcons.utensils,
+                                color: AppTheme.pageTitleIconFeeding,
+                                size: 20,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                l10n.feedingTitle,
+                                style: Theme.of(context).textTheme.titleLarge
+                                    ?.copyWith(
+                                      fontWeight: FontWeight.bold,
+                                      color: AppTheme.textDark,
+                                    ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 24),
+                          AnimatedSize(
+                            duration: const Duration(milliseconds: 360),
+                            curve: Curves.easeOutCubic,
+                            alignment: Alignment.topCenter,
+                            clipBehavior: Clip.none,
+                            child: _activeTimer == null
+                                ? const SizedBox.shrink()
+                                : Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
+                                    children: [
+                                      AnimatedSwitcher(
+                                        duration: const Duration(
+                                          milliseconds: 340,
+                                        ),
+                                        switchInCurve: Curves.easeOutCubic,
+                                        switchOutCurve: Curves.easeInCubic,
+                                        transitionBuilder: (child, animation) {
+                                          final slide =
+                                              Tween<Offset>(
+                                                begin: const Offset(0, -0.12),
+                                                end: Offset.zero,
+                                              ).animate(
+                                                CurvedAnimation(
+                                                  parent: animation,
+                                                  curve: Curves.easeOutCubic,
+                                                ),
+                                              );
+                                          return SizedBox(
+                                            width: double.infinity,
+                                            child: ClipRect(
+                                              child: FadeTransition(
+                                                opacity: animation,
+                                                child: SlideTransition(
+                                                  position: slide,
+                                                  child: child,
+                                                ),
                                               ),
                                             ),
-                                          ),
-                                        );
-                                      },
-                                      child: KeyedSubtree(
-                                        key: ObjectKey(_activeTimer!),
+                                          );
+                                        },
                                         child: _ActiveTimerBanner(
+                                          key: ValueKey(
+                                            'lactation_${_activeTimer!.startedAt.millisecondsSinceEpoch}_'
+                                            '${_activeTimer!.side.index}',
+                                          ),
                                           timer: _activeTimer!,
-                                          onStop: _stopBreast,
+                                          onPause: () =>
+                                              unawaited(_togglePauseBreast()),
+                                          onStop: () =>
+                                              unawaited(_handleStopBreast()),
                                         ),
                                       ),
-                                    ),
-                                    const SizedBox(height: 24),
-                                  ],
-                                ),
-                        ),
-                        Text(
-                          l10n.feedingSessionType,
-                          style: Theme.of(context).textTheme.titleSmall
-                              ?.copyWith(color: AppTheme.textLight),
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _TomaTypeButton(
-                                label: l10n.feedingBreast,
-                                isActive: _activeTimer != null,
-                                onTap: _onBreastTypeTap,
-                                iconBuilder: (c) => FaIcon(
-                                  FontAwesomeIcons.personBreastfeeding,
-                                  size: 28,
-                                  color: c,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: _TomaTypeButton(
-                                label: l10n.feedingBottle,
-                                isActive: false,
-                                onTap: _openBottle,
-                                iconBuilder: (c) => Icon(
-                                  MdiIcons.babyBottle,
-                                  size: 28,
-                                  color: c,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: _TomaTypeButton(
-                                label: l10n.feedingSolidFood,
-                                isActive: false,
-                                onTap: _openSolidFood,
-                                iconBuilder: (c) => Icon(
-                                  MdiIcons.silverwareForkKnife,
-                                  size: 28,
-                                  color: c,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 32),
-                        feedingRecordsAsync.when(
-                          skipLoadingOnReload: true,
-                          data: (records) {
-                            final merged =
-                                _feedingRecordsWithoutDeleted(records);
-                            final hasOlder = hasOlderAsync.maybeWhen(
-                              data: (v) => v,
-                              orElse: () => false,
-                            );
-                            return _feedingHistoryColumn(
-                              context,
-                              merged,
-                              hasOlderOutsideWindow: hasOlder,
-                            );
-                          },
-                          loading: () =>
-                              const Center(child: CircularProgressIndicator()),
-                          error: (e, _) => StreamRecordLoadError(
-                            message: l10n.feedingStreamError,
-                            onRetry: () =>
-                                ref.invalidate(feedingRecordsStreamProvider),
+                                      const SizedBox(height: 24),
+                                    ],
+                                  ),
                           ),
-                        ),
-                      ],
+                          Text(
+                            l10n.feedingSessionType,
+                            style: Theme.of(context).textTheme.titleSmall
+                                ?.copyWith(color: AppTheme.textLight),
+                          ),
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _TomaTypeButton(
+                                  label: l10n.feedingBreast,
+                                  isActive: _activeTimer != null,
+                                  confirmPhase: _phaseForSlot(
+                                    _FeedTypeSlot.breast,
+                                  ),
+                                  onTap: _onBreastTypeTap,
+                                  iconBuilder: (c) => FaIcon(
+                                    FontAwesomeIcons.personBreastfeeding,
+                                    size: 28,
+                                    color: c,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: _TomaTypeButton(
+                                  label: l10n.feedingBottle,
+                                  isActive: false,
+                                  confirmPhase: _phaseForSlot(
+                                    _FeedTypeSlot.bottle,
+                                  ),
+                                  onTap: _openBottle,
+                                  iconBuilder: (c) => Icon(
+                                    MdiIcons.babyBottle,
+                                    size: 28,
+                                    color: c,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: _TomaTypeButton(
+                                  label: l10n.feedingSolidFood,
+                                  isActive: false,
+                                  confirmPhase: _phaseForSlot(
+                                    _FeedTypeSlot.solid,
+                                  ),
+                                  onTap: _openSolidFood,
+                                  iconBuilder: (c) => Icon(
+                                    MdiIcons.silverwareForkKnife,
+                                    size: 28,
+                                    color: c,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 32),
+                          feedingRecordsAsync.when(
+                            skipLoadingOnReload: true,
+                            data: (records) {
+                              final truncateDays = ref.watch(
+                                feedingHistoryFirestoreDaysProvider,
+                              );
+                              final visible = historyRecordsOnOrAfter(
+                                records,
+                                (r) => r.dateTime,
+                                historyWindowStartForDays(truncateDays),
+                              );
+                              final merged = _feedingRecordsWithoutDeleted(
+                                visible,
+                              );
+                              return _feedingHistoryColumn(context, merged);
+                            },
+                            loading: () => const Center(
+                              child: CircularProgressIndicator(),
+                            ),
+                            error: (e, _) => StreamRecordLoadError(
+                              message: l10n.feedingStreamError,
+                              onRetry: () =>
+                                  ref.invalidate(feedingRecordsStreamProvider),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                ),
                 ),
               ),
             ),
@@ -495,9 +728,15 @@ class _FeedingViewState extends ConsumerState<FeedingView> {
 
 class _ActiveTimerBanner extends StatelessWidget {
   final LactationTimer timer;
+  final VoidCallback onPause;
   final VoidCallback onStop;
 
-  const _ActiveTimerBanner({required this.timer, required this.onStop});
+  const _ActiveTimerBanner({
+    super.key,
+    required this.timer,
+    required this.onPause,
+    required this.onStop,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -549,6 +788,18 @@ class _ActiveTimerBanner extends StatelessWidget {
               ],
             ),
           ),
+          IconButton.filled(
+            onPressed: onPause,
+            style: IconButton.styleFrom(
+              backgroundColor: AppTheme.palettePrimary.withValues(alpha: 0.12),
+              foregroundColor: AppTheme.palettePrimary,
+            ),
+            icon: Icon(
+              timer.isPaused ? Icons.play_arrow_rounded : Icons.pause_rounded,
+            ),
+            tooltip: timer.isPaused ? l10n.feedingResume : l10n.feedingPause,
+          ),
+          const SizedBox(width: 8),
           ElevatedButton(
             onPressed: onStop,
             style: ElevatedButton.styleFrom(
@@ -568,54 +819,107 @@ typedef _TomaIconBuilder = Widget Function(Color iconColor);
 class _TomaTypeButton extends StatelessWidget {
   final String label;
   final bool isActive;
+  final InlineSavePhase confirmPhase;
   final VoidCallback onTap;
   final _TomaIconBuilder iconBuilder;
 
   const _TomaTypeButton({
     required this.label,
     required this.isActive,
+    this.confirmPhase = InlineSavePhase.idle,
     required this.onTap,
     required this.iconBuilder,
   });
 
   @override
   Widget build(BuildContext context) {
-    final iconColor = isActive ? AppTheme.palettePrimary : AppTheme.textLight;
-    final surface = isActive ? const Color(0xFFF5F5F5) : Colors.white;
-    final borderColor = isActive
-        ? AppTheme.palettePrimary.withValues(alpha: 0.55)
-        : AppTheme.fieldBorder;
-    final borderWidth = isActive ? 2.0 : 1.5;
+    final l10n = AppLocalizations.of(context)!;
+    final isSaved = confirmPhase == InlineSavePhase.saved;
+    final isConfirming = confirmPhase != InlineSavePhase.idle;
+
+    final iconColor = isSaved
+        ? Colors.white
+        : (isActive ? AppTheme.palettePrimary : AppTheme.textLight);
+    final surface = isSaved
+        ? AppTheme.primaryGreen
+        : (isActive ? const Color(0xFFF5F5F5) : Colors.white);
+    final borderColor = isSaved
+        ? AppTheme.primaryGreen
+        : (isActive
+              ? AppTheme.palettePrimary.withValues(alpha: 0.55)
+              : AppTheme.fieldBorder);
+    final borderWidth = isActive || isSaved ? 2.0 : 1.5;
+    final labelColor = isSaved
+        ? Colors.white
+        : (isActive ? AppTheme.textDark : AppTheme.textLight);
 
     return Material(
       color: surface,
-      elevation: isActive ? 2 : 1.5,
+      elevation: isActive || isSaved ? 2 : 1.5,
       shadowColor: Colors.black.withValues(alpha: 0.18),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppTheme.cardRadius),
         side: BorderSide(color: borderColor, width: borderWidth),
       ),
       child: InkWell(
-        onTap: onTap,
+        onTap: isConfirming ? null : onTap,
         borderRadius: BorderRadius.circular(AppTheme.cardRadius),
         splashColor: AppTheme.palettePrimary.withValues(alpha: 0.12),
         highlightColor: AppTheme.palettePrimary.withValues(alpha: 0.06),
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 6),
-          child: Column(
-            children: [
-              iconBuilder(iconColor),
-              const SizedBox(height: 8),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: isActive ? FontWeight.w600 : FontWeight.w500,
-                  color: isActive ? AppTheme.textDark : AppTheme.textLight,
-                ),
-                textAlign: TextAlign.center,
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 320),
+            child: switch (confirmPhase) {
+              InlineSavePhase.loading => Column(
+                key: const ValueKey(InlineSavePhase.loading),
+                children: [
+                  SoftSpinner(color: iconColor),
+                  const SizedBox(height: 8),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: labelColor,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
               ),
-            ],
+              InlineSavePhase.saved => Column(
+                key: const ValueKey(InlineSavePhase.saved),
+                children: [
+                  Icon(Icons.check_circle_rounded, size: 28, color: iconColor),
+                  const SizedBox(height: 8),
+                  Text(
+                    l10n.commonSaved,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: labelColor,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+              InlineSavePhase.idle => Column(
+                key: const ValueKey(InlineSavePhase.idle),
+                children: [
+                  iconBuilder(iconColor),
+                  const SizedBox(height: 8),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: isActive ? FontWeight.w600 : FontWeight.w500,
+                      color: labelColor,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            },
           ),
         ),
       ),
@@ -632,7 +936,8 @@ class _FeedingRecordTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
-    final prefs = ref.watch(measurementPrefsProvider).valueOrNull ??
+    final prefs =
+        ref.watch(measurementPrefsProvider).valueOrNull ??
         MeasurementPrefs.defaultsForDispatcher();
     final dateCode = dateFormatLanguageCode(context);
     final (icon, label, accentColor, mirrored) = switch (record.type) {
@@ -661,19 +966,18 @@ class _FeedingRecordTile extends ConsumerWidget {
         false,
       ),
     };
-    final duration = record.type != FeedingType.solidFood &&
-            record.durationSeconds != null
+    final duration =
+        record.type != FeedingType.solidFood && record.durationSeconds != null
         ? formatDurationSecondsLocalized(l10n, record.durationSeconds!)
         : null;
-    final amount = record.type == FeedingType.bottle &&
-            record.amountMl != null
+    final amount = record.type == FeedingType.bottle && record.amountMl != null
         ? formatVolumeFromMl(record.amountMl!, prefs, l10n)
         : null;
     final secondaryDetail = record.type == FeedingType.solidFood
         ? null
         : [?duration, ?amount].nonNulls.join(' ').isEmpty
-            ? null
-            : [?duration, ?amount].nonNulls.join(' ');
+        ? null
+        : [?duration, ?amount].nonNulls.join(' ');
     final solidNameLine = record.type == FeedingType.solidFood
         ? record.solidName?.trim()
         : null;
@@ -685,7 +989,8 @@ class _FeedingRecordTile extends ConsumerWidget {
             dateFormatLanguageCode(context),
           )
         : null;
-    final hasSolidLines = record.type == FeedingType.solidFood &&
+    final hasSolidLines =
+        record.type == FeedingType.solidFood &&
         ((solidNameLine != null && solidNameLine.isNotEmpty) ||
             solidQtyLine != null);
     final borderRadius = BorderRadius.circular(AppTheme.homeCardRadius);
@@ -701,8 +1006,7 @@ class _FeedingRecordTile extends ConsumerWidget {
             children: [
               Container(
                 width: AppTheme.historyRecordStripeWidth,
-                decoration:
-                    AppTheme.historyRecordStripeDecoration(accentColor),
+                decoration: AppTheme.historyRecordStripeDecoration(accentColor),
               ),
               Padding(
                 padding: AppTheme.historyRecordLeadingPadding,
@@ -712,7 +1016,8 @@ class _FeedingRecordTile extends ConsumerWidget {
                     backgroundColor: accentColor.withValues(
                       alpha: AppTheme.historyRecordAvatarAccentOpacity,
                     ),
-                    child: record.type == FeedingType.bottle ||
+                    child:
+                        record.type == FeedingType.bottle ||
                             record.type == FeedingType.solidFood
                         ? Icon(icon, color: accentColor, size: 22)
                         : (mirrored
@@ -748,15 +1053,13 @@ class _FeedingRecordTile extends ConsumerWidget {
                           ),
                         ],
                         if (solidQtyLine != null) ...[
-                          if (solidNameLine != null &&
-                              solidNameLine.isNotEmpty)
+                          if (solidNameLine != null && solidNameLine.isNotEmpty)
                             SizedBox(
                               height: AppTheme.historyRecordAfterTitleGap,
                             ),
                           Text(
                             solidQtyLine,
-                            style:
-                                AppTheme.historyRecordPrimaryValueStyle(
+                            style: AppTheme.historyRecordPrimaryValueStyle(
                               accentColor,
                             ),
                           ),
@@ -769,13 +1072,10 @@ class _FeedingRecordTile extends ConsumerWidget {
                           ),
                         ),
                         if (secondaryDetail != null) ...[
-                          SizedBox(
-                            height: AppTheme.historyRecordAfterTitleGap,
-                          ),
+                          SizedBox(height: AppTheme.historyRecordAfterTitleGap),
                           Text(
                             secondaryDetail,
-                            style:
-                                AppTheme.historyRecordPrimaryValueStyle(
+                            style: AppTheme.historyRecordPrimaryValueStyle(
                               accentColor,
                             ),
                           ),
@@ -787,7 +1087,10 @@ class _FeedingRecordTile extends ConsumerWidget {
                             : AppTheme.historyRecordAfterTitleGap,
                       ),
                       Text(
-                        DateFormat('d MMM, HH:mm', dateCode).format(record.dateTime),
+                        DateFormat(
+                          'd MMM, HH:mm',
+                          dateCode,
+                        ).format(record.dateTime),
                         style: AppTheme.historyRecordDateTimeStyle(context),
                       ),
                     ],
@@ -805,7 +1108,8 @@ class _FeedingRecordTile extends ConsumerWidget {
                       children: [
                         IconButton(
                           icon: const Icon(Icons.edit, size: 20),
-                          onPressed: () => _showEditDialog(context, ref, record),
+                          onPressed: () =>
+                              _showEditDialog(context, ref, record),
                         ),
                         IconButton(
                           icon: const Icon(
@@ -835,7 +1139,9 @@ class _FeedingRecordTile extends ConsumerWidget {
     final l10n = AppLocalizations.of(context)!;
     if (record.type == FeedingType.solidFood) {
       final localeCode = dateFormatLanguageCode(context);
-      final nameController = TextEditingController(text: record.solidName ?? '');
+      final nameController = TextEditingController(
+        text: record.solidName ?? '',
+      );
       final initialUnit = record.solidUnit ?? SolidQuantityUnit.grams;
       final qtyController = TextEditingController(
         text: formatSolidQuantityForField(
@@ -845,12 +1151,7 @@ class _FeedingRecordTile extends ConsumerWidget {
         ),
       );
       var solidUnit = initialUnit;
-      var selectedDate = DateTime(
-        record.dateTime.year,
-        record.dateTime.month,
-        record.dateTime.day,
-      );
-      var selectedTime = TimeOfDay.fromDateTime(record.dateTime);
+      var selectedAt = record.dateTime;
       final fieldDeco = InputDecoration(
         filled: true,
         fillColor: AppTheme.fieldBackground,
@@ -871,17 +1172,16 @@ class _FeedingRecordTile extends ConsumerWidget {
         builder: (ctx) => StatefulBuilder(
           builder: (modalContext, setState) {
             final labelStyle = Theme.of(context).textTheme.labelLarge?.copyWith(
-                  fontWeight: FontWeight.w600,
-                  color: AppTheme.textDark,
-                );
+              fontWeight: FontWeight.w600,
+              color: AppTheme.textDark,
+            );
             return EditBottomSheet(
               title: l10n.feedingEditSolid,
               child: Form(
                 key: solidEditFormKey,
-                child: SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
                     Text(l10n.solidFoodNameLabel, style: labelStyle),
                     const SizedBox(height: 10),
                     TextFormField(
@@ -955,18 +1255,26 @@ class _FeedingRecordTile extends ConsumerWidget {
                       },
                     ),
                     SizedBox(height: EditDialogTheme.spacingBetweenSections),
-                    DatePickerField(
-                      value: selectedDate,
-                      onChanged: (d) => setState(() => selectedDate = d),
-                      lastDate: DateTime.now().add(const Duration(days: 1)),
-                    ),
-                    SizedBox(height: EditDialogTheme.spacingBetweenFields),
-                    TimePickerField(
-                      value: selectedTime,
-                      onChanged: (t) => setState(() => selectedTime = t),
+                    EditListCard(
+                      children: [
+                        EditInstantRow.dateTime(
+                          context: context,
+                          label: l10n.commonDateTime,
+                          value: selectedAt,
+                          showDivider: false,
+                          onTap: () async {
+                            final picked = await pickEditDateTime(
+                              context,
+                              initial: selectedAt,
+                            );
+                            if (picked != null) {
+                              setState(() => selectedAt = picked);
+                            }
+                          },
+                        ),
+                      ],
                     ),
                   ],
-                ),
                 ),
               ),
               onCancel: () => Navigator.pop(ctx),
@@ -975,16 +1283,9 @@ class _FeedingRecordTile extends ConsumerWidget {
                 final name = nameController.text.trim();
                 final q = tryParseSolidQuantity(qtyController.text, solidUnit);
                 if (q == null || !q.isFinite) return;
-                final dt = DateTime(
-                  selectedDate.year,
-                  selectedDate.month,
-                  selectedDate.day,
-                  selectedTime.hour,
-                  selectedTime.minute,
-                );
                 await IsarService.updateFeedingRecord(
                   record.copyWith(
-                    dateTime: dt,
+                    dateTime: selectedAt,
                     solidName: name,
                     solidQuantity: q,
                     solidUnit: solidUnit,
@@ -997,7 +1298,8 @@ class _FeedingRecordTile extends ConsumerWidget {
         ),
       );
     } else if (record.type == FeedingType.bottle) {
-      final prefs = ref.read(measurementPrefsProvider).valueOrNull ??
+      final prefs =
+          ref.read(measurementPrefsProvider).valueOrNull ??
           MeasurementPrefs.defaultsForDispatcher();
       final ml0 = record.amountMl ?? 0;
       final initialVolumeText = prefs.liquid == LiquidUnitMode.milliliters
@@ -1007,12 +1309,7 @@ class _FeedingRecordTile extends ConsumerWidget {
       final liquidLabel = prefs.liquid == LiquidUnitMode.milliliters
           ? l10n.feedingAmountMl
           : l10n.liquidFieldLabelFlOz;
-      var selectedDate = DateTime(
-        record.dateTime.year,
-        record.dateTime.month,
-        record.dateTime.day,
-      );
-      var selectedTime = TimeOfDay.fromDateTime(record.dateTime);
+      var selectedAt = record.dateTime;
       showModalBottomSheet(
         context: context,
         isScrollControlled: true,
@@ -1050,33 +1347,33 @@ class _FeedingRecordTile extends ConsumerWidget {
                   ),
                 ),
                 SizedBox(height: EditDialogTheme.spacingBetweenSections),
-                DatePickerField(
-                  value: selectedDate,
-                  onChanged: (d) => setState(() => selectedDate = d),
-                  lastDate: DateTime.now().add(const Duration(days: 1)),
-                ),
-                SizedBox(height: EditDialogTheme.spacingBetweenFields),
-                TimePickerField(
-                  value: selectedTime,
-                  onChanged: (t) => setState(() => selectedTime = t),
+                EditListCard(
+                  children: [
+                    EditInstantRow.dateTime(
+                      context: context,
+                      label: l10n.commonDateTime,
+                      value: selectedAt,
+                      showDivider: false,
+                      onTap: () async {
+                        final picked = await pickEditDateTime(
+                          context,
+                          initial: selectedAt,
+                        );
+                        if (picked != null) {
+                          setState(() => selectedAt = picked);
+                        }
+                      },
+                    ),
+                  ],
                 ),
               ],
             ),
             onCancel: () => Navigator.pop(ctx),
             onSave: () async {
               final ml = parseVolumeInputToMl(controller.text, prefs);
-              if (ml != null &&
-                  ml > 0 &&
-                  ml <= kMaxReasonableVolumeMl) {
-                final dt = DateTime(
-                  selectedDate.year,
-                  selectedDate.month,
-                  selectedDate.day,
-                  selectedTime.hour,
-                  selectedTime.minute,
-                );
+              if (ml != null && ml > 0 && ml <= kMaxReasonableVolumeMl) {
                 await IsarService.updateFeedingRecord(
-                  record.copyWith(amountMl: ml, dateTime: dt),
+                  record.copyWith(amountMl: ml, dateTime: selectedAt),
                 );
                 if (ctx.mounted) Navigator.pop(ctx);
               }
@@ -1087,9 +1384,8 @@ class _FeedingRecordTile extends ConsumerWidget {
     } else {
       final startDt = record.dateTime;
       final endDt = startDt.add(Duration(seconds: record.durationSeconds ?? 0));
-      var selectedDate = DateTime(startDt.year, startDt.month, startDt.day);
-      var selectedStartTime = TimeOfDay.fromDateTime(startDt);
-      var selectedEndTime = TimeOfDay.fromDateTime(endDt);
+      var selectedStart = startDt;
+      var selectedEnd = endDt;
       showModalBottomSheet(
         context: context,
         isScrollControlled: true,
@@ -1097,48 +1393,63 @@ class _FeedingRecordTile extends ConsumerWidget {
         builder: (ctx) => StatefulBuilder(
           builder: (context, setState) => EditBottomSheet(
             title: l10n.feedingEditSession,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+            child: EditListCard(
               children: [
-                DatePickerField(
-                  value: selectedDate,
-                  onChanged: (d) => setState(() => selectedDate = d),
-                  lastDate: DateTime.now().add(const Duration(days: 1)),
-                ),
-                SizedBox(height: EditDialogTheme.spacingBetweenFields),
-                TimePickerField(
-                  value: selectedStartTime,
+                EditInstantRow.dateTime(
+                  context: context,
+                  icon: Icons.play_arrow_rounded,
                   label: l10n.commonTimeStart,
-                  onChanged: (t) => setState(() => selectedStartTime = t),
+                  value: selectedStart,
+                  onTap: () async {
+                    final picked = await pickEditDateTime(
+                      context,
+                      initial: selectedStart,
+                    );
+                    if (picked == null) return;
+                    setState(() {
+                      selectedStart = picked;
+                      selectedEnd = ensureDateTimeAfter(
+                        selectedStart,
+                        selectedEnd,
+                      );
+                    });
+                  },
                 ),
-                SizedBox(height: EditDialogTheme.spacingBetweenFields),
-                TimePickerField(
-                  value: selectedEndTime,
+                EditInstantRow.dateTime(
+                  context: context,
+                  icon: Icons.stop_rounded,
                   label: l10n.commonTimeEnd,
-                  onChanged: (t) => setState(() => selectedEndTime = t),
+                  value: selectedEnd,
+                  showDivider: false,
+                  onTap: () async {
+                    final picked = await pickEditDateTime(
+                      context,
+                      initial: selectedEnd.isAfter(selectedStart)
+                          ? selectedEnd
+                          : selectedStart.add(const Duration(minutes: 1)),
+                      minimumDate: selectedStart,
+                    );
+                    if (picked == null) return;
+                    setState(
+                      () => selectedEnd = ensureDateTimeAfter(
+                        selectedStart,
+                        picked,
+                      ),
+                    );
+                  },
                 ),
               ],
             ),
             onCancel: () => Navigator.pop(ctx),
             onSave: () async {
-              final start = DateTime(
-                selectedDate.year,
-                selectedDate.month,
-                selectedDate.day,
-                selectedStartTime.hour,
-                selectedStartTime.minute,
-              );
-              final end = DateTime(
-                selectedDate.year,
-                selectedDate.month,
-                selectedDate.day,
-                selectedEndTime.hour,
-                selectedEndTime.minute,
-              );
-              var durationSec = end.difference(start).inSeconds;
-              if (durationSec < 0) durationSec += 86400;
+              final end = ensureDateTimeAfter(selectedStart, selectedEnd);
+              final durationSec = end.difference(selectedStart).inSeconds;
+              if (durationSec <= 0) return;
               await IsarService.updateFeedingRecord(
-                record.copyWith(dateTime: start, durationSeconds: durationSec),
+                record.copyWith(
+                  dateTime: selectedStart,
+                  durationSeconds: durationSec,
+                ),
               );
               if (ctx.mounted) Navigator.pop(ctx);
             },

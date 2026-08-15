@@ -2,10 +2,8 @@ import 'package:control_bebe/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/db/isar_service.dart';
 import '../../../core/models/enums.dart';
 import '../../../core/models/feeding_record.dart';
-import '../../../core/services/next_feeding_notification_service.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/solid_food_display.dart';
 
@@ -48,22 +46,19 @@ class _SolidFoodViewState extends ConsumerState<SolidFoodView> {
     });
   }
 
-  Future<void> _save() async {
+  void _submit() {
     if (!_formKey.currentState!.validate()) return;
     final name = _nameController.text.trim();
     final q = tryParseSolidQuantity(_quantityController.text, _unit);
     if (q == null || !q.isFinite) return;
-    await IsarService.addFeedingRecord(
-      FeedingRecord(
-        type: FeedingType.solidFood,
-        dateTime: DateTime.now(),
-        solidName: name,
-        solidQuantity: q,
-        solidUnit: _unit,
-      ),
+    final record = FeedingRecord(
+      type: FeedingType.solidFood,
+      dateTime: DateTime.now(),
+      solidName: name,
+      solidQuantity: q,
+      solidUnit: _unit,
     );
-    await NextFeedingNotificationService.syncFromStorage();
-    if (mounted) Navigator.of(context).pop();
+    Navigator.of(context).pop(record);
   }
 
   @override
@@ -75,6 +70,7 @@ class _SolidFoodViewState extends ConsumerState<SolidFoodView> {
       behavior: HitTestBehavior.opaque,
       child: Scaffold(
         backgroundColor: AppTheme.background,
+        resizeToAvoidBottomInset: true,
         appBar: AppBar(
           leading: IconButton(
             icon: const Icon(Icons.arrow_back),
@@ -176,31 +172,31 @@ class _SolidFoodViewState extends ConsumerState<SolidFoodView> {
                 ),
               ),
             ),
-          ],
-        ),
-        bottomNavigationBar: Material(
-          color: AppTheme.background,
-          elevation: 8,
-          shadowColor: Colors.black26,
-          child: SafeArea(
-            top: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(
-                AppTheme.screenEdgePadding,
-                12,
-                AppTheme.screenEdgePadding,
-                12,
-              ),
-              child: SizedBox(
-                width: double.infinity,
-                height: 48,
+            Material(
+              color: AppTheme.background,
+              elevation: 8,
+              shadowColor: Colors.black26,
+              child: SafeArea(
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppTheme.screenEdgePadding,
+                    12,
+                    AppTheme.screenEdgePadding,
+                    12,
+                  ),
+                  child: SizedBox(
+                    width: double.infinity,
+                    height: 48,
                 child: ElevatedButton(
-                  onPressed: _save,
+                  onPressed: _submit,
                   child: Text(l10n.commonSave),
+                ),
+                  ),
                 ),
               ),
             ),
-          ),
+          ],
         ),
       ),
     );

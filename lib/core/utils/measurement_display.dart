@@ -1,4 +1,5 @@
 import 'package:control_bebe/l10n/app_localizations.dart';
+import 'package:flutter/services.dart';
 
 import '../models/measurement_units.dart';
 
@@ -66,6 +67,25 @@ String formatWeightTrendGramsPerDay(
   return l10n.homeWeightTrendOuncesPerDay(sign, ozPerDay.toStringAsFixed(1));
 }
 
+/// Tendencia diaria de talla (cm/día).
+String formatHeightTrendCmPerDay(double cmPerDay, AppLocalizations l10n) {
+  final sign = cmPerDay >= 0 ? '+' : '';
+  return l10n.homeHeightTrendCmPerDay(sign, cmPerDay.abs().toStringAsFixed(2));
+}
+
+/// Valor destacado + unidad para cabeceras de peso (métrico: 1 decimal).
+({String value, String unit}) weightHeroDisplayParts(
+  double kg,
+  MeasurementPrefs prefs,
+  AppLocalizations l10n,
+) {
+  if (prefs.weight == WeightUnitMode.metric) {
+    return (value: kg.toStringAsFixed(1), unit: 'kg');
+  }
+  final formatted = formatWeightFromKg(kg, prefs, l10n);
+  return (value: formatted, unit: '');
+}
+
 /// Tendencia diaria para la tarjeta de peso (sin «/día»).
 String formatWeightTrendCompact(
   double gramsPerDay,
@@ -94,6 +114,49 @@ String formatVolumeFromMl(
   return l10n.formatVolumeFlOzOnly(trimFlOzDisplay(fl));
 }
 
+/// Interpreta un decimal aceptando coma o punto; rechaza mezclar ambos o
+/// varios separadores (`4,5` y `4.5` sí; `4.5,2` no).
+double? parseLooseDecimal(String raw) {
+  final t = raw.trim().replaceAll(' ', '');
+  if (t.isEmpty) return null;
+  final commaCount = ','.allMatches(t).length;
+  final dotCount = '.'.allMatches(t).length;
+  if (commaCount + dotCount > 1) return null;
+  final normalized = commaCount == 1 ? t.replaceAll(',', '.') : t;
+  return double.tryParse(normalized);
+}
+
+/// Texto de campo: quita ceros sobrantes y usa coma o punto según idioma.
+String formatDecimalForInput(
+  double value, {
+  int maxDecimals = 2,
+  bool useCommaDecimal = false,
+}) {
+  var s = value.toStringAsFixed(maxDecimals);
+  if (maxDecimals > 0) {
+    s = s.replaceFirst(RegExp(r'0+$'), '');
+    s = s.replaceFirst(RegExp(r'\.$'), '');
+  }
+  if (useCommaDecimal) s = s.replaceAll('.', ',');
+  return s;
+}
+
+/// Dígitos y como mucho un separador decimal (`,` o `.`).
+class LooseDecimalInputFormatter extends TextInputFormatter {
+  const LooseDecimalInputFormatter();
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    final t = newValue.text;
+    if (t.isEmpty) return newValue;
+    if (RegExp(r'^[0-9]*[.,]?[0-9]*$').hasMatch(t)) return newValue;
+    return oldValue;
+  }
+}
+
 /// Texto inicial del campo de edición de peso según unidad (kg o lb decimales).
 String weightInputDisplayFromKg(double kg, MeasurementPrefs prefs) {
   if (prefs.weight == WeightUnitMode.metric) {
@@ -115,10 +178,9 @@ String formatVolumeShort(
   return formatVolumeFromMl(ml, prefs, l10n);
 }
 
-/// Parsea entrada de peso del formulario → kg.
+/// Parsea entrada de peso del formulario → kg. Acepta `,` o `.`.
 double? parseWeightInputToKg(String raw, MeasurementPrefs prefs) {
-  final t = raw.trim().replaceAll(',', '.');
-  final n = double.tryParse(t);
+  final n = parseLooseDecimal(raw);
   if (n == null || n <= 0) return null;
   if (prefs.weight == WeightUnitMode.metric) {
     return n;
@@ -131,15 +193,44 @@ double maxWeightInputForValidation(MeasurementPrefs prefs) {
   return prefs.weight == WeightUnitMode.metric ? 50 : 110;
 }
 
-/// Parsea volumen del formulario → ml.
+/// Parsea volumen del formulario → ml. Acepta `,` o `.`.
 int? parseVolumeInputToMl(String raw, MeasurementPrefs prefs) {
-  final t = raw.trim().replaceAll(',', '.');
-  final n = double.tryParse(t);
+  final n = parseLooseDecimal(raw);
   if (n == null || n <= 0) return null;
   if (prefs.liquid == LiquidUnitMode.milliliters) {
     return n.round();
   }
   return usFlOzToMl(n);
+}
+
+/// Dos cantidades (ml) representan el mismo atajo (p. ej. 90 ml ≈ 3 fl oz).
+bool bottleQuickAmountsEquivalent(int aMl, int bMl) {
+  if (aMl == bMl) return true;
+  return (mlToUsFlOzNum(aMl) - mlToUsFlOzNum(bMl)).abs() < 0.06;
+}
+
+/// Primer atajo existente equivalente a [candidateMl], o null si es nuevo.
+int? findMatchingQuickAmountMl(int candidateMl, Iterable<int> existingMl) {
+  for (final existing in existingMl) {
+    if (bottleQuickAmountsEquivalent(candidateMl, existing)) return existing;
+  }
+  return null;
+}
+
+/// Si el texto del campo coincide con un atajo de biberón (ml).
+bool isBottleQuickAmountSelected(
+  int amountMl,
+  String fieldText,
+  MeasurementPrefs prefs,
+) {
+  final parsed = parseVolumeInputToMl(fieldText, prefs);
+  if (parsed == null) return false;
+  if (prefs.liquid == LiquidUnitMode.milliliters) {
+    return parsed == amountMl;
+  }
+  final fieldOz = parseLooseDecimal(fieldText);
+  if (fieldOz == null) return false;
+  return (fieldOz - mlToUsFlOzNum(amountMl)).abs() < 0.06;
 }
 
 /// Hint numérico para biberón según unidad.
@@ -149,21 +240,69 @@ String bottleVolumeHint(MeasurementPrefs prefs, AppLocalizations l10n) {
       : l10n.hintExampleFlOz;
 }
 
-/// Hint para registro de peso.
-String weightEntryHint(MeasurementPrefs prefs, AppLocalizations l10n) {
+/// Hint para registro de peso. Si hay última pesada, usa ese valor.
+String weightEntryHint(
+  MeasurementPrefs prefs,
+  AppLocalizations l10n, {
+  double? lastKg,
+  bool useCommaDecimal = false,
+}) {
+  if (lastKg != null && lastKg > 0) {
+    final value = prefs.weight == WeightUnitMode.metric
+        ? lastKg
+        : lastKg * 2.2046226218;
+    return formatDecimalForInput(
+      value,
+      maxDecimals: 2,
+      useCommaDecimal: useCommaDecimal,
+    );
+  }
   return prefs.weight == WeightUnitMode.metric
       ? l10n.hintExampleWeight
       : l10n.hintExampleWeightLb;
 }
 
+/// Hint para registro de altura. Si hay última medida, usa ese valor.
+String heightEntryHint(
+  AppLocalizations l10n, {
+  double? lastCm,
+  bool useCommaDecimal = false,
+}) {
+  if (lastCm != null && lastCm > 0) {
+    return formatDecimalForInput(
+      lastCm,
+      maxDecimals: 1,
+      useCommaDecimal: useCommaDecimal,
+    );
+  }
+  return l10n.hintExampleHeight;
+}
+
 /// Etiqueta del campo de peso en formularios.
-String weightFieldLabelForPrefs(
-  MeasurementPrefs prefs,
-  AppLocalizations l10n,
-) {
+String weightFieldLabelForPrefs(MeasurementPrefs prefs, AppLocalizations l10n) {
   return prefs.weight == WeightUnitMode.metric
       ? l10n.weightFieldLabelMetric
       : l10n.weightFieldLabelImperial;
+}
+
+String formatHeightFromCm(double heightCm, AppLocalizations l10n) {
+  final value = heightCm == heightCm.roundToDouble()
+      ? heightCm.round().toString()
+      : heightCm.toStringAsFixed(1).replaceFirst(RegExp(r'\.0$'), '');
+  return l10n.formatHeightCm(value);
+}
+
+String heightInputDisplayFromCm(double heightCm) {
+  return heightCm == heightCm.roundToDouble()
+      ? heightCm.round().toString()
+      : heightCm.toStringAsFixed(1).replaceFirst(RegExp(r'\.0$'), '');
+}
+
+/// Parsea entrada de talla → cm. Acepta `,` o `.`.
+double? parseHeightInputToCm(String raw) {
+  final n = parseLooseDecimal(raw);
+  if (n == null || n <= 0) return null;
+  return n;
 }
 
 /// Texto del control deslizante de peso (segmentos).

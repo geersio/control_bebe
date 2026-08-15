@@ -3,4 +3,5 @@
     <color name="ic_launcher_background">#F8F9FA</color>
     <color name="lactation_notification_primary">#212121</color>
     <color name="lactation_notification_secondary">#616161</color>
+    <color name="lactation_saved_green">#2D6A4F</color>
 </resources>

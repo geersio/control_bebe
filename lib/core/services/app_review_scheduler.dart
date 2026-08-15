@@ -3,47 +3,53 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'app_review_service.dart';
 
-/// Primera valoración a los 3 días y segunda a los 15, contados desde la
-/// primera apertura de la app **con esta lógica** (p. ej. tras actualizar).
-/// Se invoca tras guardar un registro nuevo (peso, pañal o alimentación) vía `IsarService`.
-/// Como mucho se intenta una petición por llamada a `maybePrompt`.
+/// Pide valoración en momentos de valor: tras guardar los registros 10, 50 y 200
+/// (peso, pañal o alimentación) vía `IsarService`.
+/// Como mucho se intenta una petición por registro guardado.
 class AppReviewScheduler {
   AppReviewScheduler._();
 
-  static const _kAnchorMs = 'app_review_anchor_ms';
-  static const _kDay3Shown = 'app_review_day3_shown';
-  static const _kDay15Shown = 'app_review_day15_shown';
-
-  static int _calendarDaysSinceAnchor(int anchorMs) {
-    final anchor = DateTime.fromMillisecondsSinceEpoch(anchorMs);
-    final start = DateTime(anchor.year, anchor.month, anchor.day);
-    final now = DateTime.now();
-    final end = DateTime(now.year, now.month, now.day);
-    return end.difference(start).inDays;
-  }
+  static const _kSavedRecordCount = 'app_review_saved_record_count';
+  static const _kPrompt10Shown = 'app_review_prompt_10_shown';
+  static const _kPrompt50Shown = 'app_review_prompt_50_shown';
+  static const _kPrompt200Shown = 'app_review_prompt_200_shown';
 
   static Future<void> maybePrompt() async {
     if (kIsWeb || !AppReviewService.canRequestInAppReview) return;
 
     final sp = await SharedPreferences.getInstance();
-    final anchorMs = sp.getInt(_kAnchorMs);
-    if (anchorMs == null) {
-      await sp.setInt(_kAnchorMs, DateTime.now().millisecondsSinceEpoch);
-      return;
-    }
+    final count = (sp.getInt(_kSavedRecordCount) ?? 0) + 1;
+    await sp.setInt(_kSavedRecordCount, count);
 
-    final days = _calendarDaysSinceAnchor(anchorMs);
-    final day3Shown = sp.getBool(_kDay3Shown) ?? false;
-    final day15Shown = sp.getBool(_kDay15Shown) ?? false;
+    await _requestAtMilestone(
+      sp,
+      count,
+      milestone: 10,
+      flagKey: _kPrompt10Shown,
+    );
+    await _requestAtMilestone(
+      sp,
+      count,
+      milestone: 50,
+      flagKey: _kPrompt50Shown,
+    );
+    await _requestAtMilestone(
+      sp,
+      count,
+      milestone: 200,
+      flagKey: _kPrompt200Shown,
+    );
+  }
 
-    if (!day3Shown && days >= 3) {
-      await AppReviewService.requestReview();
-      await sp.setBool(_kDay3Shown, true);
-      return;
-    }
-    if (!day15Shown && days >= 15) {
-      await AppReviewService.requestReview();
-      await sp.setBool(_kDay15Shown, true);
-    }
+  static Future<void> _requestAtMilestone(
+    SharedPreferences sp,
+    int count, {
+    required int milestone,
+    required String flagKey,
+  }) async {
+    if (count != milestone || (sp.getBool(flagKey) ?? false)) return;
+
+    await AppReviewService.requestReview();
+    await sp.setBool(flagKey, true);
   }
 }

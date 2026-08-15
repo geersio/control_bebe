@@ -3,9 +3,6 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class AppTheme {
-  /// Ruta del icono de título en AppBar (Home, Alimentación, Peso, Pañales).
-  static const String titleIconAsset = 'assets/images/icon_mibebe.png';
-
   /// Paleta (guía de estilo + azul principal de marca).
   static const Color palettePrimary = Color(0xFF2D6583);
   static const Color paletteSecondary = Color(0xFFA8E6CF);
@@ -27,12 +24,16 @@ class AppTheme {
   static const Color navFeedingSelectedFill = softPrimaryFill;
 
   /// Misma píldora que home para todos los tabs.
+  static const Color navSleepSelectedFill = softPrimaryFill;
+
+  /// Misma píldora que home para todos los tabs.
   static const Color navWeightSelectedFill = softPrimaryFill;
 
   /// Icono y texto de la pestaña activa (mismo azul que home).
   static const Color navHomeSelectedFg = palettePrimary;
   static const Color navDiapersSelectedFg = palettePrimary;
   static const Color navFeedingSelectedFg = palettePrimary;
+  static const Color navSleepSelectedFg = palettePrimary;
   static const Color navWeightSelectedFg = palettePrimary;
 
   /// Icono junto al título en cada sección (punto medio entre fill y fg de la píldora).
@@ -46,16 +47,21 @@ class AppTheme {
     navFeedingSelectedFg,
     0.5,
   )!;
+  static final Color pageTitleIconSleep = Color.lerp(
+    navSleepSelectedFill,
+    navSleepSelectedFg,
+    0.5,
+  )!;
   static final Color pageTitleIconWeight = Color.lerp(
     navWeightSelectedFill,
     navWeightSelectedFg,
     0.5,
   )!;
 
-  /// Texto (carbón / apagado).
+  /// Texto (carbón / secundario accesible ≥4.5:1 sobre fondo).
   static const Color textHeading = Color(0xFF2D6583);
   static const Color textDark = Color(0xFF424242);
-  static const Color textLight = Color(0xFF90A4AE);
+  static const Color textLight = Color(0xFF546E7A);
 
   /// Consejo del día (sobre fondo tertiary).
   static const Color tipText = Color(0xFF5D4037);
@@ -93,8 +99,42 @@ class AppTheme {
   static const Color diaperHistoryDirtyAccent = Color(0xFF8B6A55);
   static const Color diaperHistoryBothAccent = Color(0xFF667A92);
 
-  /// Acento de la ficha de historial de peso (misma familia que la pestaña Peso).
-  static Color get weightHistoryAccent => navWeightSelectedFg;
+  /// Acentos de crecimiento: misma familia visual, distinguibles entre sí.
+  static const Color growthWeightAccent = Color(0xFFC65A48);
+  static const Color growthHeightAccent = Color(0xFFB7791F);
+
+  /// Acento de la ficha de historial de peso.
+  static Color get weightHistoryAccent => growthWeightAccent;
+
+  /// Acento de la ficha de historial de altura.
+  static const Color heightHistoryAccent = growthHeightAccent;
+
+  /// Sueño: acentos morados del reloj circular y fichas de historial.
+  static const Color sleepPurple = Color(0xFF7E57C2);
+  static const Color sleepPurpleDeep = Color(0xFF5E35B1);
+  static const Color sleepPurpleSoft = Color(0xFFEDE7F6);
+  static const Color sleepClockTrack = Color(0xFFD1C4E9);
+
+  /// Tarjeta live despierto/durmiendo.
+  static const Color sleepLiveCardTop = Color(0xFF3A3F78);
+  static const Color sleepLiveCardBottom = Color(0xFF2A2F5C);
+  static const Color sleepLiveCardBlob = Color(0xFF4A5088);
+  static const Color sleepLiveDayTop = Color(0xFF7EC4E8);
+  static const Color sleepLiveDayBottom = Color(0xFFB8DFF0);
+  static const Color sleepLiveDaySun = Color(0xFFFFE082);
+  static const Color sleepLiveDayText = Color(0xFF1E3A5F);
+  static const Color sleepLiveWakeButton = Color(0xFFE8B45A);
+  static const Color sleepLiveButtonText = Color(0xFF2C2F4A);
+  static const Color sleepHistoryAccent = sleepPurple;
+
+  /// Sueño nocturno: azul-morado.
+  static const Color sleepHistoryNightAccent = Color(0xFF5C6BC0);
+
+  /// Siesta: morado.
+  static const Color sleepHistoryNapAccent = sleepPurple;
+
+  /// Despertar nocturno: violeta suave (entre índigo y púrpura).
+  static const Color sleepHistoryNightWakingAccent = Color(0xFF9575CD);
 
   /// Layout compartido: fichas de historial en alimentación, pañales y peso.
   /// Franja más ancha con degradado a transparente hacia el contenido.
@@ -109,13 +149,11 @@ class AppTheme {
       gradient: LinearGradient(
         begin: Alignment.centerLeft,
         end: Alignment.centerRight,
-        colors: [
-          soft,
-          soft.withValues(alpha: 0),
-        ],
+        colors: [soft, soft.withValues(alpha: 0)],
       ),
     );
   }
+
   static const double historyRecordAvatarRadius = 22;
   static const EdgeInsets historyRecordLeadingPadding = EdgeInsets.symmetric(
     horizontal: 10,
@@ -140,18 +178,16 @@ class AppTheme {
   /// Fondo del avatar en fichas de historial (acento sobre blanco); más alto = menos “lavado”.
   static const double historyRecordAvatarAccentOpacity = 0.32;
 
-  static TextStyle historyRecordTypeTitleStyle(Color accent) => TextStyle(
-        fontWeight: FontWeight.w600,
-        color: accent,
-      );
+  static TextStyle historyRecordTypeTitleStyle(Color accent) =>
+      TextStyle(fontWeight: FontWeight.w600, color: accent);
 
   static TextStyle historyRecordPrimaryValueStyle(Color accent) => TextStyle(
-        fontWeight: FontWeight.w700,
-        fontSize: 15,
-        height: 1.2,
-        color: accent,
-        letterSpacing: 0.15,
-      );
+    fontWeight: FontWeight.w700,
+    fontSize: 15,
+    height: 1.2,
+    color: accent,
+    letterSpacing: 0.15,
+  );
 
   static TextStyle historyRecordDateTimeStyle(BuildContext context) {
     final base = Theme.of(context).textTheme.bodySmall;
@@ -164,7 +200,10 @@ class AppTheme {
   }
 
   /// Margen horizontal entre el borde de pantalla y tarjetas / bloques (referencia Home).
-  static const double screenEdgePadding = 20;
+  static const double screenEdgePadding = 18;
+
+  /// Padding interior de la tarjeta principal de pestaña (Alimentación, Pañales, Peso).
+  static const double sectionCardPadding = 22;
 
   /// Aire extra bajo el contenido cuando `SafeArea(bottom: false)` (barra de tabs, login, etc.).
   static const double extraBottomSpacing = 8;
@@ -183,7 +222,7 @@ class AppTheme {
   static const double cardElevation = 0.5;
 
   /// Margen exterior por defecto de [Card] en Material 3 (las pestañas lo aplican; Home debe compensarlo).
-  static const double cardOuterMargin = 4;
+  static const double cardOuterMargin = 2;
 
   /// Contorno fino de tarjetas (misma referencia que historial alimentación/pañales).
   static Color get cardOutline => fieldBorder.withValues(alpha: 0.65);
@@ -259,7 +298,10 @@ class AppTheme {
       appBarTheme: AppBarTheme(
         backgroundColor: background,
         foregroundColor: textHeading,
+        surfaceTintColor: Colors.transparent,
         elevation: 0,
+        scrolledUnderElevation: 0,
+        shadowColor: Colors.transparent,
         centerTitle: true,
         systemOverlayStyle: systemUiForLightBackground,
         titleTextStyle: GoogleFonts.inter(

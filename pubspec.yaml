@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.4+5
+version: 1.0.5+1
 
 environment:
   sdk: '>=3.11.0 <4.0.0'
@@ -69,6 +69,15 @@ dependencies:
   shared_preferences: ^2.3.5
   in_app_review: ^2.0.11
   keyboard_actions: ^4.2.1
+  firebase_analytics: ^11.6.0
+
+  # Informe PDF para el pediatra (curvas OMS + resumen)
+  pdf: ^3.11.3
+  printing: ^5.13.4
+  purchases_flutter: ^10.4.0
+
+  # Abrir la pantalla nativa de gestión de suscripciones (managementURL)
+  url_launcher: ^6.3.2
 
 dependency_overrides:
   # Parche: ContentState con revisión monotónica para que ActivityKit refresque la Isla (pub 2.4.7 solo enviaba appGroupId).
@@ -105,8 +114,6 @@ flutter:
   uses-material-design: true
 
   assets:
-    - assets/images/app_icon.png
-    - assets/images/icon_mibebe.png
     - assets/images/google_logo.svg
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
@@ -142,14 +149,15 @@ flutter_launcher_icons:
   ios: true
   remove_alpha_ios: true
   background_color_ios: "#F8F9FA"
-  image_path: "assets/images/icon_launcher.png"
+  image_path: "assets/images/Mibebé_icon_1024px.png"
+  image_path_ios: "assets/images/Mibebe_icon_ios_1024px.png"
   adaptive_icon_background: "#F8F9FA"
-  adaptive_icon_foreground: "assets/images/icon_launcher.png"
+  adaptive_icon_foreground: "assets/images/Mibebé_icon_1024px.png"
 
 # Configuración de splash screen nativo (flutter_native_splash)
 flutter_native_splash:
   color: "#F8F9FA"
-  image: "assets/images/app_icon.png"
+  image: "assets/images/Mibebe_splash_1024px.png"
   android_12:
     color: "#F8F9FA"
-    image: "assets/images/app_icon.png"
+    image: "assets/images/Mibebe_splash_1024px.png"

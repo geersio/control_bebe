@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="lactation_live_notification_title">Lactancia</string>
+    <string name="lactation_action_pause">Pausar cronómetro</string>
+    <string name="lactation_action_stop">Parar y guardar toma</string>
+    <string name="lactation_saved_label">Guardado</string>
 </resources>

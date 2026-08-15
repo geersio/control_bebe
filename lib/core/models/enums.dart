@@ -23,3 +23,11 @@ enum SolidQuantityUnit {
   grams,
   units,
 }
+
+/// Tipo de sueño (persistido en Firestore como índice); no reordenar valores existentes.
+enum SleepType {
+  night,
+  nap,
+  /// Despertar nocturno (no cuenta como sueño; puede anidarse bajo un padre).
+  nightWaking,
+}

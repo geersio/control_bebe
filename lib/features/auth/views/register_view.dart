@@ -42,10 +42,10 @@ class _RegisterViewState extends ConsumerState<RegisterView> {
         _emailController.text.trim(),
         _passwordController.text,
       );
-      if (mounted) {
-        // Volver a la raíz para que [AuthWrapper] siga activo y muestre onboarding o inicio.
-        Navigator.of(context).popUntil((route) => route.isFirst);
-      }
+      if (!mounted) return;
+      // Solo cerrar esta ruta. No usar popUntil: AppInitializer puede haber
+      // empujado el paywall tras el commit del borrador y popUntil lo tumbaría.
+      Navigator.of(context).pop(true);
     } on FirebaseAuthException catch (e) {
       if (!mounted) return;
       final l10n = AppLocalizations.of(context)!;
@@ -109,26 +109,6 @@ class _RegisterViewState extends ConsumerState<RegisterView> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const SizedBox(height: 16),
-                Center(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.1),
-                          blurRadius: 20,
-                          offset: const Offset(0, 8),
-                        ),
-                      ],
-                    ),
-                    child: Image.asset(
-                      'assets/images/app_icon.png',
-                      width: 140,
-                      height: 140,
-                      fit: BoxFit.contain,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 24),
                 Container(
                   padding: const EdgeInsets.all(28),
                   decoration: BoxDecoration(

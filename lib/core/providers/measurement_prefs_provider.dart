@@ -24,4 +24,17 @@ class MeasurementPrefsNotifier extends AsyncNotifier<MeasurementPrefs> {
     await next.save();
     state = AsyncData(next);
   }
+
+  /// `null` o vacío = moneda automática según el dispositivo.
+  Future<void> setCurrency(String? currencyCode) async {
+    final current = await future;
+    final normalized = (currencyCode == null || currencyCode.isEmpty)
+        ? null
+        : currencyCode.toUpperCase();
+    final next = normalized == null
+        ? current.copyWith(clearCurrency: true)
+        : current.copyWith(currencyCode: normalized);
+    await next.save();
+    state = AsyncData(next);
+  }
 }
